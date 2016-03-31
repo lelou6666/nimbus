@@ -21,7 +21,7 @@ import org.apache.commons.logging.LogFactory;
 import org.nimbus.authz.AuthzDBAdapter;
 import org.nimbus.authz.AuthzDBException;
 import org.nimbus.authz.ObjectWrapper;
-import org.nimbus.authz.UserAlias;
+import org.nimbus.authz.RepositoryImageLocator;
 import org.nimbustools.api._repr.vm._VMFile;
 import org.nimbustools.api.brain.ModuleLocator;
 import org.nimbustools.api.repr.Caller;
@@ -35,12 +35,7 @@ import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.Repository;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.ContainerInterface;
 
 import javax.sql.DataSource;
-import java.net.MalformedURLException;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.sql.Connection;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -62,13 +57,13 @@ public class CumulusRepository implements Repository {
 
     protected final ContainerInterface container;
     protected final ReprFactory repr;
-    protected AuthzDBAdapter authDB;
-    protected String cumulusHost = null;
-    protected String repoBucket = null;
-    protected String prefix = null;
-    protected int repo_id = -1;
-    protected String rootFileMountAs = null;
+    protected final AuthzDBAdapter authDB;
+    protected final RepositoryImageLocator imageLocator;
 
+    protected String repoBucket;
+    protected String prefix;
+    protected int repo_id = -1;
+    protected String rootFileMountAs;
 
     // -------------------------------------------------------------------------
     // CONSTRUCTOR
@@ -76,15 +71,15 @@ public class CumulusRepository implements Repository {
 
     public CumulusRepository(ContainerInterface containerImpl,
                              ModuleLocator locator,
-                            DataSource ds)
+                             DataSource dataSource,
+                             RepositoryImageLocator imageLocator)
         throws Exception
     {
-        if (containerImpl == null)
+        if (dataSource == null)
         {
-            throw new IllegalArgumentException("containerImpl may not be null");
+            throw new IllegalArgumentException("dataSource may not be null");
         }
-        this.authDB = new AuthzDBAdapter(ds);
-
+        this.authDB = new AuthzDBAdapter(dataSource);
 
         if (containerImpl == null)
         {
@@ -96,11 +91,27 @@ public class CumulusRepository implements Repository {
         {
             throw new IllegalArgumentException("locator may not be null");
         }
-
         this.repr = locator.getReprFactory();
+
+        if (imageLocator == null)
+        {
+            throw new IllegalArgumentException("imageLocator may not be null");
+        }
+        this.imageLocator = imageLocator;
     }
 
-    
+
+    public String getCumulusPublicUser()
+    {
+        return this.authDB.getCumulusPublicUser();
+    }
+
+    public void setCumulusPublicUser(
+        String                          pubUser)
+    {
+        this.authDB.setCumulusPublicUser(pubUser);
+    }
+
 
     // -------------------------------------------------------------------------
     // IoC INIT METHOD
@@ -109,10 +120,6 @@ public class CumulusRepository implements Repository {
     void validate()
         throws Exception
     {
-        if (this.cumulusHost == null)
-        {
-            throw new Exception("Invalid: Missing 'cumulus host' string");
-        }
         if (this.repoBucket == null)
         {
             throw new Exception("Missing the 'repoBucket' setting");
@@ -139,31 +146,10 @@ public class CumulusRepository implements Repository {
         this.repoBucket= rb;
     }
 
-    public String getRepoBucket()
-    {
-        return this.repoBucket;
-    }
-
-    public void setCumulusHost(String rb)
-            throws Exception
-    {
-        this.cumulusHost = rb;
-    }
-
-    public String getPrefix()
-    {
-        return this.cumulusHost;
-    }
-
     public void setPrefix(String rb)
             throws Exception
     {
         this.prefix = rb;
-    }
-
-    public String getCumulusHost()
-    {
-        return this.cumulusHost;
     }
 
     public boolean isListingEnabled()
@@ -180,33 +166,21 @@ public class CumulusRepository implements Repository {
     {
         this.rootFileMountAs = rootFileMountAs;
     }
-    
+
     // -------------------------------------------------------------------------
     // implements Repository
     // -------------------------------------------------------------------------
 
-    // XXXX  not sure what to do here
-    public String getImageLocation(Caller caller)
-            throws CannotTranslateException
-    {
+    public String getImageLocation(Caller caller, String vmname)
+            throws CannotTranslateException {
+
         final String dn = caller.getIdentity();
-        String ownerID;
-        try
-        {
-            ownerID = this.authDB.getCanonicalUserIdFromDn(dn);
+        try {
+            return this.imageLocator.getImageLocation(dn, vmname);
+        } catch (Exception e) {
+            throw new CannotTranslateException(e.getMessage(), e);
         }
-        catch(AuthzDBException ex)
-        {
-            throw new CannotTranslateException(ex.toString(), ex);
-        }
-        if (ownerID == null)
-        {
-            throw new CannotTranslateException("No caller/ownerID?");
-        }
-
-        return "cumulus://" + this.cumulusHost + "/" + this.repoBucket + "/" + this.prefix + "/" + ownerID;
     }
-
 
     public VMFile[] constructFileRequest(String imageID,
                                          ResourceAllocation ra,
@@ -240,9 +214,9 @@ public class CumulusRepository implements Repository {
             }
             else
             {
-                urlStr = getImageLocation(caller) + "/" + imageID;
+                urlStr = getImageLocation(caller, imageID) + "/" + imageID;
             }
-            file.setMountAs(this.getRootFileMountAs());
+            file.setMountAs(this.rootFileMountAs);
             URI imageURI = new URI(urlStr);
             file.setURI(imageURI);
             vma[0] = file;
@@ -252,6 +226,38 @@ public class CumulusRepository implements Repository {
         {
             throw new CannotTranslateException(ex);
         }                
+    }
+
+    private ArrayList objectList(List<ObjectWrapper> objList, boolean readwrite)
+    {
+        ArrayList files  = new ArrayList();
+        for (ObjectWrapper ow : objList)
+        {
+            FileListing fl = new FileListing();
+            String name = ow.getName();
+            String [] parts = name.split("/", 3);
+            if(parts.length != 3)
+            {
+                // if a bad name jsut skip this file... they may have uploaded baddness
+                logger.error("The filename " + name + " is not in the proper format");
+                continue;
+            }
+            name = parts[2];
+            fl.setName(name);
+            fl.setSize(ow.getSize());            
+
+            long tm = ow.getTime();
+            Date dt = new Date(tm);
+            Calendar cl = Calendar.getInstance();
+            cl.setTime(dt);
+            String tStr = new Integer(cl.get(Calendar.HOUR_OF_DAY)).toString() + ":" + new Integer(cl.get(Calendar.MINUTE)).toString();
+            fl.setTime(tStr);
+            String dStr = getMonthStr(cl.get(Calendar.MONTH)) + " " + new Integer(cl.get(Calendar.DAY_OF_MONTH)).toString();
+            fl.setDate(dStr);
+            fl.setReadWrite(readwrite);
+            files.add(fl);
+        }
+        return files;
     }
 
     // return a list of all the images owned by this user
@@ -275,37 +281,19 @@ public class CumulusRepository implements Repository {
         {
             String ownerID = this.authDB.getCanonicalUserIdFromDn(dn);
 
-            final ArrayList files = new ArrayList();
+            final ArrayList files;
             //String canUser = this.authDB.getCanonicalUserIdFromS3(ownerID);
             keyName = this.prefix + "/" + ownerID + '%';
+            String commonkeyName =  this.prefix + "/common/%";
 
-            final List<ObjectWrapper> objList = this.authDB.searchParentFilesByKey(this.repo_id, keyName);
-            for (ObjectWrapper ow : objList)
-            {
-                FileListing fl = new FileListing();
-                String name = ow.getName();
-                String [] parts = name.split("/", 3);
-                if(parts.length != 3)
-                {
-                    // if a bad name jsut skip this file... they may have uploaded baddness
-                    logger.error("The filename " + name + " is not in the proper format");
-                    continue;
-                }
-                name = parts[2];
-                fl.setName(name);
-                fl.setSize(ow.getSize());
+            List<ObjectWrapper> objList = this.authDB.searchParentFilesByKey(this.repo_id, keyName);
+            List<ObjectWrapper> objCommonList = this.authDB.searchParentFilesByKey(this.repo_id, commonkeyName);
 
-                long tm = ow.getTime();
-                Date dt = new Date(tm);
-                Calendar cl = Calendar.getInstance();
-                cl.setTime(dt);
-                String tStr = new Integer(cl.get(Calendar.HOUR_OF_DAY)).toString() + ":" + new Integer(cl.get(Calendar.MINUTE)).toString();
-                fl.setTime(tStr);
-                String dStr = getMonthStr(cl.get(Calendar.MONTH)) + " " + new Integer(cl.get(Calendar.DAY_OF_MONTH)).toString();
-                fl.setDate(dStr);                
-                fl.setReadWrite(true);
-                files.add(fl);
-            }
+            files = objectList(objList, true);
+            ArrayList filescommon = objectList(objCommonList, false);
+
+            files.addAll(filescommon);
+
             return (FileListing[]) files.toArray(new FileListing[files.size()]);
         }
         catch(AuthzDBException ex)

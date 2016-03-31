@@ -54,6 +54,7 @@ class File(object):
         self.object_size = row[File.cols['object_size']]
         ctm = row[File.cols['creation_time']]
         if ctm != None:
+            ctm = str(ctm)
             ndx = ctm.rfind(".")
             if ndx > 0:
                 ctm = ctm[:ndx]
@@ -106,6 +107,12 @@ class File(object):
         data = (self.get_id(),)
         c = self.db_obj._run_fetch_iterator(s, data, _convert_object_row_to_UserFile, [self])
         return c
+
+    def set_data_key(self, data_key):
+        s = "UPDATE objects set data_key = ? where id = ?"
+        data = (data_key,self.id,)
+        self.db_obj._run_no_fetch(s, data)
+        self.data_key = data_key
 
     def get_file_from_db_id(db_obj, id):
         s = "SELECT " + File.get_select_str() + """
@@ -186,7 +193,8 @@ class File(object):
         s = s + " parent_id = ?"
         data.append(self.id)
         if match_str != None:
-            s = s + " and name LIKE '" + match_str + "'"
+            s = s + " and name LIKE ? "
+            data.append(match_str)
 
         if clause != None:
             s = s + clause
@@ -201,15 +209,27 @@ class File(object):
         ot = pynimbusauthz.object_types[object_type]
         s = "SELECT " + File.get_select_str() + """
             FROM objects
-            WHERE name LIKE '%%%s%%' and object_type = %d""" % (pattern, ot)
-        data = []
+            WHERE name LIKE ? and object_type = ?""" 
+        data = [pattern, ot,]
         if parent != None:
-            s = s + " and parent_id = " + parent.get_id()
+            s = s + " and parent_id = ?"
+            data.append(parent.get_id())
 
         c = db_obj._run_fetch_iterator(s, data, _convert_alias_row_to_File)
         return c
 
     find_files = staticmethod(find_files)
+
+    def find_files_from_data(db_obj, pattern):
+        # look it up
+        s = "SELECT " + File.get_select_str() + """
+            FROM objects
+            WHERE data_key LIKE ?"""
+        data = [pattern,]
+        c = db_obj._run_fetch_iterator(s, data, _convert_alias_row_to_File)
+        return c
+
+    find_files_from_data = staticmethod(find_files_from_data)
 
     def __str__(self):
         return self.name + ":" + self.object_type + ":" + str(self.parent)

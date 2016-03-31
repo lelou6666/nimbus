@@ -25,8 +25,9 @@ import shlex
 from nimbusweb.setup.setuperrors import *
 from nimbusweb.setup.groupauthz import *
 from optparse import SUPPRESS_HELP
+import shutil
 
-g_report_options = ["dn", "canonical_id", "access_id", "access_secret"]
+g_report_options = ["dn", "canonical_id", "access_id", "access_secret", "group"]
 
 
 def get_nimbus_home():
@@ -70,7 +71,7 @@ Create/edit a nimbus user
     all_opts.append(opt)
     opt = cbOpts("delim", "D", "Character between columns in the report", ",")
     all_opts.append(opt)
-    opt = cbOpts("group", "g", "Change the users group", None, vals=(None, "01", "02", "03", "04"))
+    opt = cbOpts("group", "g", "Change the users group", None)
     all_opts.append(opt)
 
     opt = cbOpts("report", "r", "Report the selected columns from the following: " + pycb.tools.report_options_to_string(g_report_options), pycb.tools.report_options_to_string(g_report_options))
@@ -140,8 +141,7 @@ def remove_gridmap(dn):
         print "WARNING! user not found in %s" % (dn)
     os.close(nf)
     f.close()
-    os.unlink(gmf)
-    os.rename(new_name, gmf)
+    shutil.move(new_name, gmf)
 
 
 def report_results(o, db):
@@ -149,9 +149,18 @@ def report_results(o, db):
     if user == None:
         raise CLIError('EUSER', "The user should not be in db but is not: %s" % (o.emailaddr))
 
+    # reset group for proper report
+    o.group = None
+    nh = get_nimbus_home()
+    groupauthz_dir = os.path.join(nh, "services/etc/nimbus/workspace-service/group-authz/")
     dnu = user.get_alias_by_friendly(o.emailaddr, pynimbusauthz.alias_type_x509)
     if dnu != None:
         o.dn = dnu.get_name()
+        X = find_member(groupauthz_dir, o.dn)
+        if X:
+            o.group = str(X.group_id)
+        else:
+            o.group = "None"
     o.canonical_id = user.get_id()
 
     s3u = user.get_alias_by_friendly(o.emailaddr, pynimbusauthz.alias_type_s3)
@@ -186,10 +195,13 @@ def edit_user(o, db):
         if dnu == None:
             raise CLIError('EUSER', "There is x509 entry for: %s" % (o.emailaddr))
         dn = dnu.get_name()
-        group = find_member(groupauthz_dir, dn)
-        if group != None:
-            remove_member(groupauthz_dir, dn)
-        add_member(groupauthz_dir, dn, int(o.group))
+        oldgroup = find_member(groupauthz_dir, dn)
+        try:
+            add_member(groupauthz_dir, dn, o.group)
+        except InvalidGroupError:
+            raise CLIError('EUSER', "Authz group '%s' does not exist" % o.group)
+        if oldgroup and int(oldgroup.group_id) != int(o.group):
+            oldgroup.remove_member(dn)
 
     if o.dn != None:
         if dnu == None:

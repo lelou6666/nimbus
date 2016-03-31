@@ -66,32 +66,30 @@ fi
 
 source $PYVEDIR/bin/activate
 
-
-if [ ! -e $PIP ]; then
-    cd $source_dir/deps
-    tar -zxf pip-0.7.2.tar.gz
-    if [ $? -ne 0 ]; then
-        echo "unable to untar pip-0.7.2.tar.gz"
-        exit 1
-    fi
-    cd $source_dir/deps/pip-0.7.2
-    $PYVE setup.py install
-    if [ $? -ne 0 ]; then
-        echo "pip was not installed correctly"
-        exit 1
-    fi
-fi
-
 cd $source_dir/deps
 if [ $? -ne 0 ]; then
     echo "Could not change to the deps directory"
     exit 1
 fi
-
 ./get-em.sh
 if [ $? -ne 0 ]; then
     echo "get-em failed"
     exit 1
+fi
+
+if [ ! -e $PIP ]; then
+    cd $source_dir
+    tar -zxf pip-0.7.2.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "unable to untar pip-0.7.2.tar.gz"
+        exit 1
+    fi
+    cd $source_dir/pip-0.7.2
+    $PYVE setup.py install
+    if [ $? -ne 0 ]; then
+        echo "pip was not installed correctly"
+        exit 1
+    fi
 fi
 
 echo ""
@@ -106,6 +104,25 @@ if [ $? -ne 0 ]; then
     echo "$PIP failed to install deps"
     exit 1
 fi
+
+echo "installing authz"
+echo "----------------"
+cd authz
+$PYVE setup.py install
+if [ $? -ne 0 ]; then
+    echo "$PIP failed to install authz"
+    exit 1
+fi
+cd $source_dir
+echo "installing cb"
+echo "-------------"
+cd cb
+$PYVE setup.py install
+if [ $? -ne 0 ]; then
+    echo "$PIP failed to install authz"
+    exit 1
+fi
+
 
 echo ""
 echo "-----------------------------------------------------------------"

@@ -38,6 +38,7 @@ public interface CreateRequest {
     public String getName();
     public VMFile[] getVMFiles();
     public NIC[] getRequestedNics();
+    public String getRequestedResourcePool();
     public Schedule getRequestedSchedule();
     public String getCoScheduleID();
     public boolean isCoScheduleDone();
@@ -50,5 +51,7 @@ public interface CreateRequest {
     public String getInitialStateRequest();
     public Context getContext();
     public String getMdUserData();
+    public String getCredential();
     public String getSshKeyName();
+    public String getClientToken();
 }

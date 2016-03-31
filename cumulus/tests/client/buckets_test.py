@@ -41,7 +41,7 @@ class TestBucketsWithBoto(unittest.TestCase):
             b.delete()
 
     def cb_random_bucketname(self, len):
-        chars = string.letters + string.digits
+        chars = string.letters.lower() + string.digits
         newpasswd = ""
         for i in range(len):
             newpasswd = newpasswd + random.choice(chars)
@@ -118,7 +118,7 @@ class TestBucketsWithBoto(unittest.TestCase):
         conn = pycb.test_common.cb_get_conn(self.host, self.port, self.id, self.pw)
         bn = self.cb_random_bucketname(10)
         try:
-            bucket = conn.get_bucket(dn)
+            bucket = conn.get_bucket(bn)
             passed = False
         except:
             passed = True
