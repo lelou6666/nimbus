@@ -10,4 +10,3 @@ from pynimbusauthz.tests.test_list_user import *
 from pynimbusauthz.tests.test_stat import *
 from pynimbusauthz.tests.user_tests import *
 from pynimbusauthz.tests.commit_tests import *
-from pynimbusauthz.tests.test_rebase import *

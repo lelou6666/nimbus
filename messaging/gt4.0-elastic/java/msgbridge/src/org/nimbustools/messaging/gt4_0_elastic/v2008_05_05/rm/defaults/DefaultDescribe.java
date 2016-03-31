@@ -25,7 +25,7 @@ import org.nimbustools.api.repr.vm.VMFile;
 import org.nimbustools.api.repr.vm.State;
 import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.Schedule;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.*;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.*;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.Validity;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.Networks;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.ResourceAllocations;
@@ -338,7 +338,7 @@ public class DefaultDescribe implements Describe {
         final RunningInstancesItemType riit = new RunningInstancesItemType();
 
         riit.setInstanceId(elasticID);
-        riit.setImageId(this.getImageID(vm.getVMFiles()));
+        riit.setImageId(this.getImageID(vm));
         riit.setInstanceState(this.getState(vm));
         riit.setReason(this.getReason(vm));
         this.addNICs(vm.getNics(), riit);
@@ -346,11 +346,6 @@ public class DefaultDescribe implements Describe {
         riit.setLaunchTime(this.getLaunchTime(vm));
         riit.setPlacement(this.getPlacement());
         riit.setMonitoring(new InstanceMonitoringStateType("disabled"));
-        riit.setInstanceLifecycle(vm.getLifeCycle());
-        if(vm.getSpotInstanceRequestID() != null){
-            riit.setSpotInstanceRequestId(vm.getSpotInstanceRequestID());
-        }
-        riit.setClientToken(vm.getClientToken());
         
         final String[] availableKernels = this.kernels.getAvailableKernels();
         if (availableKernels == null || availableKernels.length == 0) {
@@ -371,8 +366,6 @@ public class DefaultDescribe implements Describe {
         } else {
             riit.setKeyName(keyName);
         }
-        riit.setProductCodes(new ProductCodesSetType(new ProductCodesSetItemType[]{}));
-
         return riit;
     }
 
@@ -387,17 +380,6 @@ public class DefaultDescribe implements Describe {
         return prt;
     }
 
-    public PlacementRequestType getPlacementReq() {
-        final PlacementRequestType prt = new PlacementRequestType();
-        final String[] availabilityZones = this.zones.getAvailabilityZones();
-        if (availabilityZones == null || availabilityZones.length == 0) {
-            prt.setAvailabilityZone("UNKNOWN");
-        } else {
-            prt.setAvailabilityZone(availabilityZones[0]);
-        }
-        return prt;
-    }    
-    
     public Calendar getLaunchTime(VM vm) throws CannotTranslateException {
 
         if (vm == null) {
@@ -423,7 +405,7 @@ public class DefaultDescribe implements Describe {
             throw new CannotTranslateException("ra is missing");
         }
 
-        return this.RAs.getMatchingName(vm, ra, this.networks.getManagerPublicNetworkName(), this.networks.getManagerPrivateNetworkName());
+        return this.RAs.getMatchingName(ra);
     }
 
     public InstanceStateType getState(VM vm)
@@ -489,7 +471,13 @@ public class DefaultDescribe implements Describe {
         }
     }
 
-    public String getImageID(VMFile[] vmFiles) throws CannotTranslateException {
+    public String getImageID(VM vm) throws CannotTranslateException {
+
+        if (vm == null) {
+            throw new CannotTranslateException("vm is missing");
+        }
+
+        final VMFile[] vmFiles = vm.getVMFiles();
 
         final String UNKNOWN = "UNKNOWN";
 
@@ -534,10 +522,8 @@ public class DefaultDescribe implements Describe {
             return; // *** EARLY RETURN ***
         }
 
-        String privateAssignedHostname = null;
-        String publicAssignedHostname = null;
-        String privateAssignedIp = null;
-        String publicAssignedIp = null;
+        String publicAssigned = null;
+        String privateAssigned = null;
 
         for (int i = 0; i < nics.length; i++) {
 
@@ -554,33 +540,23 @@ public class DefaultDescribe implements Describe {
                     "missing hostname in NIC");
                 continue; // *** GOTO NEXT VM ***
             }
-            final String ipAddress = nic.getIpAddress();
-            if (ipAddress == null) {
-                logger.error("Invalid Manager implementation, " +
-                    "missing IP address in NIC");
-                continue; // *** GOTO NEXT VM ***
-            }
 
             final String networkName = nic.getNetworkName();
             if (this.networks.isPublicNetwork(networkName)) {
-                if (publicAssignedHostname != null) {
+                if (publicAssigned != null) {
                     logger.warn("Can't understand real NICs from duplicate " +
                             "networks yet, treating second one as unknown NIC");
                 } else {
                     riit.setDnsName(hostname);
-                    publicAssignedHostname = hostname;
-                    riit.setIpAddress(ipAddress);
-                    publicAssignedIp = ipAddress;
+                    publicAssigned = hostname;
                 }
             } else if (this.networks.isPrivateNetwork(networkName)) {
-                if (privateAssignedHostname != null) {
+                if (privateAssigned != null) {
                     logger.warn("Can't understand real NICs from duplicate " +
                             "networks yet, treating second one as unknown NIC");
                 } else {
                     riit.setPrivateDnsName(hostname);
-                    privateAssignedHostname = hostname;
-                    riit.setPrivateIpAddress(ipAddress);
-                    privateAssignedIp = ipAddress;
+                    privateAssigned = hostname;
                 }
             } else {
                 logger.warn("Hostname is neither private nor public " +
@@ -591,12 +567,10 @@ public class DefaultDescribe implements Describe {
 
         if (this.networks.getManagerPublicNetworkName().equals(
                 this.networks.getManagerPrivateNetworkName())) {
-            if (publicAssignedHostname != null && privateAssignedHostname == null) {
-                riit.setPrivateDnsName(publicAssignedHostname);
-                riit.setPrivateIpAddress(publicAssignedIp);
-            } else if (publicAssignedHostname == null && privateAssignedHostname != null) {
-                riit.setDnsName(privateAssignedHostname);
-                riit.setIpAddress(privateAssignedIp);
+            if (publicAssigned != null && privateAssigned == null) {
+                riit.setPrivateDnsName(publicAssigned);
+            } else if (publicAssigned == null && privateAssigned != null) {
+                riit.setDnsName(privateAssigned);
             }
         }
 

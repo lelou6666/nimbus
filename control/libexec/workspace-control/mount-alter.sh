@@ -41,12 +41,17 @@ IFS=' '
 
 \unalias -a
 
-set -f -u -C -p -P
+set -f -e -u -C -p -P
 
 # set:
 #
 # -f  
 #     Disable file name generation (globbing).
+# -e  
+#     Exit immediately if a simple command (see section Simple Commands)
+#     exits with a non-zero status, unless the command that fails is part
+#     of an until or while loop, part of an if statement, part of a && or
+#     || list, or if the command's return status is being inverted using !
 # -u  
 #     Treat unset variables as an error when performing parameter expansion.
 #     An error message will be written to the standard error, and a
@@ -82,20 +87,6 @@ function strlen (){
 MOUNT="/bin/mount"
 UMOUNT="/bin/umount"
 CP="/bin/cp"
-MKDIR="/bin/mkdir"
-CHMOD="/bin/chmod"
-MODPROBE="/sbin/modprobe"
-EXPR="/usr/bin/expr"
-PKILL="/usr/bin/pkill"
-
-# qemu-nbd is used when an HD image is in qcow2 format.
-# It will be used to attach the HD image as an nbd device, which allows to
-# mount the root partition inside.
-#
-# Make sure QEMU_NBD is the full path to the qemu-nbd executable, and
-# QEMU_NBD_NAME matches its process name (usually qemu-nbd).
-QEMU_NBD="/usr/bin/qemu-nbd"
-QEMU_NBD_NAME="qemu-nbd"
 
 FLOCKFILE=/opt/nimbus/var/workspace-control/lock/loopback.lock
 FLOCK=/usr/bin/flock
@@ -111,14 +102,6 @@ fi
 #######################
 
 DRYRUN="false"  # or "true"
-
-# If CREATE_SSH_DIR is set to true (default), mount-alter will create the
-# /root/.ssh directory before copying the authorized_keys file. This allows to
-# make propagation succeed with VM images which do not have a /root/.ssh
-# directory (as it is often the case when no SSH key has ever been installed).
-#
-# If set to false, this script will not try to create the /root/.ssh directory.
-CREATE_SSH_DIR="true" # or "false"
 
 # Only requests to mount files UNDER this directory are honored.
 # You must use absolute path and include trailing slash.
@@ -168,8 +151,6 @@ elif [ "$subcommand" = "one" ]; then
   subcommand="ONE"
 elif [ "$subcommand" = "hdone" ]; then
   subcommand="HDONE"
-elif [ "$subcommand" = "qcowone" ]; then
-  subcommand="QCOWONE"
 else
   echo "invalid subcommand"
   exit 1
@@ -210,17 +191,6 @@ elif [ "$subcommand" = "HDONE" ]; then
   sourcefiles="$datafile"
   targetfiles="$datatarget"
   
-elif [ "$subcommand" = "QCOWONE" ]; then
-  if [ $# -ne 5 ]; then
-    echo "qcowone subcommand requires 6 and only 6 arguments: qcowone <imagefile> <mntpoint> <datafile> <datatarget>"
-    exit 1
-  fi
-  echo "  - datafile: $datafile"
-  echo "  - datatarget: $datatarget"
-
-  sourcefiles="$datafile"
-  targetfiles="$datatarget"
-
 else
   echo "??"
   exit 64
@@ -340,44 +310,6 @@ done
 # ALTER IMAGE #
 ###############
 
-function qemu_nbd_disconnect () {
-  cmd="$QEMU_NBD -d /dev/nbd0"
-
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    ( $cmd )
-    if [ $? -ne 0 ]; then
-      # nbd will print to stderr
-      problem="true"
-    else
-      echo "  - successful"
-    fi
-  fi
-
-  # Sometimes qemu-nbd process get stuck and a disconnect is not enough.
-  # So we kill them.
-  cmd="$PKILL -9 $QEMU_NBD_NAME"
-
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    ( $cmd )
-    if [ $? -eq 0 ]; then
-      # One or more processes matched the criteria:
-      # let's log some info
-      echo "  - successful"
-      echo ""
-      echo "!!! We killed some (stuck?) $QEMU_NBD_NAME processes !!!"
-      echo ""
-    elif [ $? -eq 1 ]; then
-      echo "  - successful (no process killed)"
-    else
-      problem="true"
-      echo "  - failed"
-    fi
-  fi
-
-}
-
 (
 $FLOCK -x 200
 
@@ -385,63 +317,10 @@ echo ""
 echo "Altering image (dryrun = $DRYRUN):"
 echo ""
 
-problem="false"
-
-if [ "$subcommand" = "QCOWONE" ]; then
-  cmd="$MODPROBE nbd max_part=8"
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    ( $cmd )
-    if [ $? -ne 0 ]; then
-      # xm will print to stderr
-      exit 5
-    else
-      echo "  - successful"
-    fi
-  fi
-
-  cmd="$QEMU_NBD --connect /dev/nbd0 $imagefile"
-
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    (
-      # Close the lock file descriptor in this subshell, otherwise it stays
-      # locked in the qemu-nbd daemonized process.  If qemu-nbd hangs, further
-      # mount-alter won't be able to flock.
-      exec 200>&-
-      $cmd
-    )
-
-    if [ $? -ne 0 ]; then
-      # xm will print to stderr
-      exit 6
-    else
-      echo "  - successful"
-    fi
-  fi
-
-  # qemu-nbd takes some time to connect the image to the device.
-  # Wait for maximum 30 seconds for nbd0p1 to show up.
-  i=30
-  while [ $i -ne 0 ]; do
-    ls /dev/nbd0p1 > /dev/null 2>&1 && break
-    i=`$EXPR $i - 1`
-    echo "No /dev/nbd0p1 yet, will try again for $i seconds"
-    sleep 1
-  done
-  if ! ls /dev/nbd0p1 > /dev/null 2>&1; then
-    echo "Waited 30 seconds but no /dev/nbd0p1 showed up, exiting"
-    qemu_nbd_disconnect
-    exit 66
-  fi
-fi
-
 if [ "$subcommand" = "ONE" ]; then
   cmd="$MOUNT -o loop,noexec,nosuid,nodev,noatime,sync $imagefile $mountpoint"
 elif [ "$subcommand" = "HDONE" ]; then
   cmd="$MOUNT -o loop,noexec,nosuid,nodev,noatime,sync,offset=$offsetint $imagefile $mountpoint"
-elif [ "$subcommand" = "QCOWONE" ]; then
-  cmd="$MOUNT /dev/nbd0p1 $mountpoint"
 else
   echo "??"
   exit 65
@@ -452,45 +331,17 @@ if [ "$DRYRUN" != "true" ]; then
   ( $cmd )
   if [ $? -ne 0 ]; then
     # mount will print to stderr
-    if [ "$subcommand" = "QCOWONE" ]; then
-      # disconnect the nbd device
-      qemu_nbd_disconnect
-    fi
     exit 5
   else
     echo "  - successful"
   fi
 fi
 
-if [ "$CREATE_SSH_DIR" == "true" -a "$datatarget" == "/root/.ssh/authorized_keys" -a -d "$mountpoint/root" ]; then
-  cmd="$MKDIR -p $mountpoint/root/.ssh"
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    ( $cmd )
-    if [ $? -eq 0 ]; then
-      echo "  - successful"
-    else
-      problem="true"
-    fi
-  fi
-
-  cmd="$CHMOD 700 $mountpoint/root/.ssh"
-  echo "command = $cmd"
-  if [ "$DRYRUN" != "true" ]; then
-    ( $cmd )
-    if [ $? -eq 0 ]; then
-      echo "  - successful"
-    else
-      problem="true"
-    fi
-  fi
-fi
+problem="false"
 
 if [ "$subcommand" = "ONE" ]; then
   cmd="$CP $datafile $mountpoint/$datatarget"
 elif [ "$subcommand" = "HDONE" ]; then
-  cmd="$CP $datafile $mountpoint/$datatarget"
-elif [ "$subcommand" = "QCOWONE" ]; then
   cmd="$CP $datafile $mountpoint/$datatarget"
 else
   echo "??"
@@ -514,19 +365,14 @@ if [ "$DRYRUN" != "true" ]; then
   ( $cmd )
   if [ $? -ne 0 ]; then
     # umount will print to stderr
-    problem="true"
+    exit 6
   else
     echo "  - successful"
+    # notify that one or more CP invocations did not succeed:
+    if [ "$problem" = "true" ]; then
+      exit 7
+    fi
   fi
-fi
-
-if [ "$subcommand" = "QCOWONE" ]; then
-  qemu_nbd_disconnect
-fi
-
-# notify that one or more command invocations did not succeed:
-if [ "$problem" = "true" ]; then
-  exit 7
 fi
 
 ) 200<$FLOCKFILE

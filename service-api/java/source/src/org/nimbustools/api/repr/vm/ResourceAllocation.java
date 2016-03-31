@@ -35,7 +35,4 @@ public interface ResourceAllocation {
     public int getCpuPercentage();
     public int getMemory();
     public int getNodeNumber();
-    public boolean isSpotInstance();
-    public String getPublicNetwork();
-    public String getPrivateNetwork();
 }

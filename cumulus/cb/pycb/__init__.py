@@ -9,11 +9,9 @@ from cbPosixBackend import cbPosixBackend
 from ConfigParser import SafeConfigParser
 from pycb.cbAuthzSecurity import cbAuthzUser
 from pycb.cbAuthzSecurity import cbAuthzSec
-import random
+
 from optparse import OptionParser
 import hmac
-from pycb.cbRedirector import *
-import boto.provider
 try:
     from hashlib import sha1 as sha
     from hashlib import sha256 as sha256
@@ -51,22 +49,21 @@ class CBConfig(object):
         self.default_settings()
         self.load_settings()
 
-        conf_err_msg = ""
         config_error = False
         if self.auth == None:
             config_error = True
-            conf_err_msg = "No authentication module set: |%s|" % (self.auth_error)
+            print "No authentication module set: |%s|" % (self.auth_error)
 
         if self.bucket == None:
             config_error = True
-            conf_err_msg = conf_err_msg + " No backend set"
+            print "No backend set"
 
         if self.installdir == None:
             config_error = True
-            conf_err_msg = conf_err_msg + " No install dir set"
+            print "No install dir set"
 
         if config_error:
-            msg = """cumulus.ini file must have the following set:
+            print """cumulus.ini file must have the following set:
 installdir=<path to cumulus installation>
 
 The search path for cumulus.ini is:
@@ -77,7 +74,6 @@ The search path for cumulus.ini is:
     cumulus.ini
     env 'CUMULUS_SETTINGS_FILE
 """
-            raise Exception(msg + "\n" + conf_err_msg)
 
         self.setup_logger()
 
@@ -109,9 +105,6 @@ The search path for cumulus.ini is:
         self.https_cert = None
         self.use_https = False
         self.block_size = 1024*512
-        self.lb_file = None
-        self.lb_max = 0
-        self.redirector = cbRedirectorIface()
 
     def get_contact(self):
         return (self.hostname, self.port)
@@ -196,19 +189,6 @@ The search path for cumulus.ini is:
             except:
                 pass
 
-            try:
-                self.lb_file = s.get("load_balanced", "hostfile")
-                self.lb_max = int(s.get("load_balanced", "max"))
-            except:
-                pass
-
-            try:
-                redirector_name = s.get("redirector", "type")
-                if redirector_name == "basic":
-                    self.redirector = cbBasicRedirector(s)
-            except:
-                pass
-
 
     def parse_cmdline(self, argv):
         global Version
@@ -245,33 +225,9 @@ def get_auth_hash(key, method, path, headers, uri):
             path = path + sr
 
     myhmac = hmac.new(key, digestmod=sha)
-    c_string = boto.utils.canonical_string(method, path, headers, provider=boto.provider.get_default())
+    c_string = boto.utils.canonical_string(method, path, headers)
     myhmac.update(c_string)
     auth_hash = base64.encodestring(myhmac.digest()).strip()
     return auth_hash
 
 config = CBConfig()
-
-# this is not a long term solution
-def get_next_host():
-    if not config.lb_file:
-        return None
-
-    try:
-        hosts = []
-        f = open(config.lb_file, "r")
-        for l in f.readlines():
-            hosts.append(l.strip())
-        f.close()
-
-        my_host = "%s:%d" % (config.hostname, config.port)
-
-        for i in range(0, 10):
-            ndx = random.randint(0, len(hosts)-1)
-            h = hosts[ndx]
-            if h != my_host:
-                return h
-        return h
-    except Exception, ex:
-        log(logging.ERROR, "get next host error %s" % (str(ex)))
-        return None

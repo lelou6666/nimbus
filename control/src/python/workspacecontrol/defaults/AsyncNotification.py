@@ -98,7 +98,7 @@ class DefaultAsyncNotification:
                     
             else:
                 raise ProgrammingError("unknown actiondone for notification")
-       
+        
             errtxt = self._bashEscape(errtxt)
 
 
@@ -122,13 +122,14 @@ class DefaultAsyncNotification:
         """returns \ escapes for some bash special characters"""
         if not cmd:
             return cmd
-        escs = "\\\"'`|;()?#$^&*=[]<>"
+        escs = "\\'`|;()?#$^&*="
         for e in escs:
             idx = 0
             ret = 0
             while ret != -1:
                 ret = cmd.find(e, idx)
                 if ret >= 0:
-                    cmd = "%s\\\\\\%s" % (cmd[:ret],cmd[ret:])
-                    idx = ret + 4
+                    cmd = "%s\%s" % (cmd[:ret],cmd[ret:])
+                    idx = ret + 2
         return cmd
+        

@@ -143,7 +143,7 @@ public class ContextBrokerResourceImpl implements ContextBrokerResource {
 
     // always access it this way internally in the class or there may
     // be a check then act on the cache set
-    public synchronized Blackboard getBlackboard()
+    private synchronized Blackboard getBlackboard()
                                     throws ContextBrokerException {
         if (this.resourceID == null) {
             throw new ContextBrokerException("no resource id yet (?)");

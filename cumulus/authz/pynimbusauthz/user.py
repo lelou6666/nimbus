@@ -49,16 +49,10 @@ class User(object):
     # remove everything associated with a user
     # including files if the are completely orphaned
     def destroy_brutally(self):
-        s = "DELETE FROM object_quota where user_id = ?"
-        data = (self.uuid,)
-        self.db_obj._run_no_fetch(s, data)
         s = "DELETE FROM user_alias where user_id = ?"
         data = (self.uuid,)
         self.db_obj._run_no_fetch(s, data)
         s = "DELETE FROM object_acl where user_id = ?"
-        data = (self.uuid,)
-        self.db_obj._run_no_fetch(s, data)
-        s = "delete from objects where parent_id in (select id from objects where owner_id = ?)"
         data = (self.uuid,)
         self.db_obj._run_no_fetch(s, data)
         s = "DELETE FROM objects where owner_id = ?"
@@ -178,8 +172,8 @@ class User(object):
     # return all matching alias
     def find_alias(db_obj, alias_name, alias_type=None):
         s = "SELECT " + UserAlias.get_select_str() 
-        s = s + " FROM user_alias WHERE alias_name LIKE ? "
-        data = [alias_name,]
+        s = s + " FROM user_alias WHERE alias_name LIKE '%s'" % (alias_name)
+        data = []
         if alias_type != None:
             at = pynimbusauthz.alias_types[alias_type]
             s = s + "and alias_type = " + str(at)
@@ -248,8 +242,8 @@ class User(object):
     get_user_by_friendly = staticmethod(get_user_by_friendly)
 
     def find_user_by_friendly(db_obj, friendly_pattern):
-        s = "select id from users_canonical where friendly_name LIKE ? "
-        data = [friendly_pattern,]
+        s = "select id from users_canonical where friendly_name LIKE '%s'" % (friendly_pattern)
+        data = []
         c = db_obj._run_fetch_iterator(s, data, _convert_user_row_to_User)
         return c
     find_user_by_friendly = staticmethod(find_user_by_friendly)
@@ -349,8 +343,8 @@ class UserAlias(object):
 
     def find_all_alias_by_friendly(db_obj, fn, type=pynimbusauthz.alias_type_s3):
         at = pynimbusauthz.alias_types[type]
-        s = "select "+ UserAlias.get_select_str()+" from user_alias where friendly_name LIKE ? and alias_type = ?"
-        data = (fn, at,)
+        s = "select "+ UserAlias.get_select_str()+" from user_alias where friendly_name LIKE '%s' and alias_type = ?" % (fn)
+        data = (at,)
         c = db_obj._run_fetch_iterator(s, data, _convert_alias_row_to_UserAlias)
         return c
     find_all_alias_by_friendly = staticmethod(find_all_alias_by_friendly)

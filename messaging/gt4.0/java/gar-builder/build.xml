@@ -44,24 +44,20 @@
     <fileset dir="${nimbus.messaging.gt4_0.gar.build.lib.dir}" id="garjars"/>
     <property name="garjars.id" value="garjars"/>
 
+    <!-- garetc.id -->
+    <fileset dir="${nimbus.messaging.gt4_0.gar.build.etc.dir}" id="garEtc"/>
+    <property name="garetc.id" value="garEtc"/>
+
     <!-- garshare.id -->
     <fileset dir="${nimbus.messaging.gt4_0.gar.build.share.dir}" id="garshare"/>
     <property name="garshare.id" value="garshare"/>
 
-    <!-- not used for GAR that broker uses -->
-    <target name="init-deployment-properties">
+    <property name="garserverdeployment.file"
+              location="${nimbus.messaging.gt4_0.gar.wsddfile}"/>
 
-        <!-- garetc.id -->
-        <fileset dir="${nimbus.messaging.gt4_0.gar.build.etc.dir}" id="garEtc"/>
-        <property name="garetc.id" value="garEtc"/>
-
-        <property name="garserverdeployment.file"
-                  location="${nimbus.messaging.gt4_0.gar.wsddfile}"/>
-
-        <property name="garjndiconfigdeployment.file"
-                  location="${nimbus.messaging.gt4_0.gar.jndifile}"/>
-    </target>
-
+    <property name="garjndiconfigdeployment.file"
+              location="${nimbus.messaging.gt4_0.gar.jndifile}"/>
+    
     <!-- *********************
          unused GAR properties
          setting these to avoid build warning messages from GT...
@@ -100,29 +96,11 @@
          COPIES FOR LIB DIRECTORY
          ******************************************************************* -->
 
-    <target name="lib_copies" depends="base_lib_copies">
+    <target name="lib_copies" depends="init">
 
         <copy todir="${nimbus.messaging.gt4_0.gar.build.lib.dir}">
-            <fileset dir="${nimbus.service.main.dist.dir}">
-                <include name="*.jar"/>
-                <include name="*LICENSE*"/>
-            </fileset>
-            <fileset dir="${nimbus.metadata-server.dist.dir}">
-                <include name="*.jar"/>
-                <include name="*LICENSE*"/>
-            </fileset>
+
             <fileset dir="${nimbus.libservices.dir}">
-                <include name="*.jar"/>
-                <include name="*LICENSE*"/>
-            </fileset>
-        </copy>
-    </target>
-
-    <target name="base_lib_copies" depends="init">
-
-        <copy todir="${nimbus.messaging.gt4_0.gar.build.lib.dir}">
-
-            <fileset dir="${nimbus.baselibservices.dir}">
                 <include name="*.jar"/>
                 <include name="*LICENSE*"/>
             </fileset>
@@ -134,11 +112,11 @@
                 <include name="*.jar"/>
                 <include name="*LICENSE*"/>
             </fileset>
-            <fileset dir="${nimbus.querygenmodule.dist.dir}">
+            <fileset dir="${nimbus.service.main.dist.dir}">
                 <include name="*.jar"/>
                 <include name="*LICENSE*"/>
             </fileset>
-            <fileset dir="${nimbus.autocommon.dist.dir}">
+            <fileset dir="${nimbus.metadata-server.dist.dir}">
                 <include name="*.jar"/>
                 <include name="*LICENSE*"/>
             </fileset>
@@ -166,13 +144,10 @@
          COPIES FOR ETC DIRECTORY
          ******************************************************************* -->
 
-    <target name="etc_copies" depends="base_etc_copies">
+    <target name="etc_copies" depends="init">
         <copy todir="${nimbus.messaging.gt4_0.gar.build.etc.dir}">
             <fileset dir="${nimbus.service.main.etc.dir}" />
         </copy>
-    </target>
-
-    <target name="base_etc_copies" depends="init">
         <copy todir="${nimbus.messaging.gt4_0.gar.build.etc.dir}">
             <fileset dir="${nimbus.messaging.gt4_0-elastic.etc.dir}" />
         </copy>
@@ -183,6 +158,7 @@
             <fileset dir="${nimbus.messaging.gt4_0.gar.etc.dir}" />
         </copy>
     </target>
+
     
     <!-- *******************************************************************
          COPIES FOR SHARE DIRECTORY
@@ -210,7 +186,7 @@
          CREATE DISTRIBUTION
          ******************************************************************* -->
 
-    <target name="_dist" depends="init-deployment-properties, lib_copies, etc_copies, share_copies">
+    <target name="_dist" depends="lib_copies, etc_copies, share_copies">
 
         <ant antfile="${build.packages}" target="makeGar">
 

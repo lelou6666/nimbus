@@ -18,7 +18,6 @@ package org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general;
 
 import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.RequiredVMM;
-import org.nimbustools.api.repr.vm.VM;
 import org.nimbustools.api.repr.CannotTranslateException;
 
 public interface ResourceAllocations {
@@ -26,22 +25,17 @@ public interface ResourceAllocations {
     public String getSmallName();
     public String getLargeName();
     public String getXlargeName();
-    public String getCustomName();
 
     public String getCpuArch();
     public String getVmmType();
     public String getVmmVersion();
 
     /**
-     * @param vm vm used
      * @param ra ra used
      * @return name to use
      * @throws CannotTranslateException problem
      */
-    public String getMatchingName(VM vm,
-                                  ResourceAllocation ra,
-                                  String managerPublicNetwork,
-                                  String managerPrivateNetwork)
+    public String getMatchingName(ResourceAllocation ra)
             throws CannotTranslateException;
 
     /**
@@ -53,14 +47,11 @@ public interface ResourceAllocations {
      */
     public ResourceAllocation getMatchingRA(String name,
                                             int minNumNodes,
-                                            int maxNumNodes,
-                                            boolean spot)
+                                            int maxNumNodes)
             throws CannotTranslateException;
 
     /**
      * @return vmm to request
      */
     public RequiredVMM getRequiredVMM();
-    
-    public String getSpotInstanceType();
 }

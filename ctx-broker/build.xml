@@ -71,22 +71,6 @@
         <fileset dir="${nimbus.ctxbroker.stubs.dist}">
               <include name="*.jar"/>
         </fileset>
-
-        <fileset dir="${nimbus.authz.dist.dir}">
-            <include name="*.jar"/>
-        </fileset>
-
-        <fileset dir="${nimbus.querygeneral.dist.dir}">
-              <include name="*.jar"/>
-        </fileset>
-
-        <fileset dir="${nimbus.service.api.dist.dir}">
-            <include name="*.jar"/>
-        </fileset>
-
-        <fileset dir="${nimbus.ctxbroker.lib.dir}">
-            <include name="*.jar"/>
-        </fileset>
     </path>
 
     <target name="compile" depends="stubs">
@@ -168,19 +152,11 @@
          GAR RELATED
          ******************************************************************* -->
 
-    <target name="gar-bundled">
-        <ant dir="${nimbus.ctxbroker.gar.dir}" target="dist-bundled" />
+    <target name="gar">
+        <ant dir="${nimbus.ctxbroker.gar.dir}" target="dist" />
     </target>
 
-    <target name="gar-standalone">
-        <ant dir="${nimbus.ctxbroker.gar.dir}" target="dist-standalone" />
-    </target>
-
-    <target name="deploy" depends="dist, gar-bundled">
-        <ant dir="${nimbus.ctxbroker.gar.dir}" target="deploy" />
-    </target>
-
-    <target name="deploy-standalone" depends="dist, gar-standalone">
+    <target name="deploy" depends="dist, gar">
         <ant dir="${nimbus.ctxbroker.gar.dir}" target="deploy" />
     </target>
 

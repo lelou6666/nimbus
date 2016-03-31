@@ -14,7 +14,6 @@ def main(argv=None):
         
     parser = wc_optparse.parsersetup()
 
-
     if argv:
         (opts, args) = parser.parse_args(argv[1:])
     else:

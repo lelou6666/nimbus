@@ -59,7 +59,6 @@
                classpathref="nimbus.authz.main.classpath"
                source="1.5"
                target="1.5"
-               includeantruntime="false"
                debug="on">
 
             <include name="**/*.java"/>

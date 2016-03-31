@@ -31,7 +31,6 @@ public interface _CreateRequest extends CreateRequest {
     public void setName(String name);
     public void setVMFiles(VMFile[] vmFiles);
     public void setRequestedNics(NIC[] requested);
-    public void setRequestedResourcePool(String requested);
     public void setRequestedSchedule(Schedule requested);
     public void setCoScheduleID(String id);
     public void setCoScheduleDone(boolean done);
@@ -43,8 +42,6 @@ public interface _CreateRequest extends CreateRequest {
     public void setShutdownType(String type);
     public void setInitialStateRequest(String state);
     public void setContext(Context context);
-    public void setCredential(String credential);
     public void setMdUserData(String mdUserData);
     public void setSshKeyName(String keyName);
-    public void setClientToken(String clientToken);
 }

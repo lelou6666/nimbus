@@ -3,9 +3,7 @@ import os
 import re
 import shutil
 import stat
-import struct
 import sys
-import tempfile
 import zope.interface
 
 import workspacecontrol.api.modules
@@ -37,8 +35,6 @@ class DefaultImageEditing:
         self.sudo_path = None
         self.mounttool_path = None
         self.fdisk_path = None
-        self.qcow2_enabled = False
-        self.qemu_img_path = None
         self.mountdir = None
         self.tmpdir = None
         
@@ -50,19 +46,7 @@ class DefaultImageEditing:
         self.fdisk_path = self.p.get_conf_or_none("mount", "fdisk")
         if not self.fdisk_path:
             self.c.log.warn("no fdisk configuration, mount+edit functionality for HD images is disabled")
-
-        qcow2 = self.p.get_conf_or_none("mount", "qcow2")
-        if qcow2 and qcow2.strip().lower() == "true":
-            self.qcow2_enabled = True
-        if not self.qcow2_enabled:
-            self.c.log.warn("mount+edit functionality for qcow2 images is disabled")
             
-        self.qemu_img_path = self.p.get_conf_or_none("cow", "qemu_img")
-        if not self.qemu_img_path:
-            self.c.log.warn("no qemu_img configuration, copy-on-write support is disabled")
-        elif not self.qcow2_enabled:
-            self.c.log.warn("cannot enable copy-on-write support without qcow2 support")
-
         # if functionality is disabled but arg exists, should fail program
         self._validate_args_if_exist()
             
@@ -232,16 +216,11 @@ class DefaultImageEditing:
         
         Return nothing, local_file_set will be modified as necessary.
         """
-
+        
         for lf in local_file_set.flist():
-            if lf.path.count(".gz") > 0 :
+            if lf.path[-3:] == ".gz":
                 lf.path = self._gunzip_file_inplace(lf.path)
         
-        # copy-on-write
-        if self.qemu_img_path:
-            for lf in local_file_set.flist():
-                lf.path = self._create_cow_file(lf.path, local_file_set.instance_dir())
-
         # disabled
         if not self.mounttool_path:
             return
@@ -283,41 +262,7 @@ class DefaultImageEditing:
         
         Return nothing, local_file_set will be modified as necessary.
         """
-
-        for lf in local_file_set.flist():
-            instance_dir = local_file_set.instance_dir()
-            if instance_dir is not None:
-                image_name = os.path.basename(lf.path)
-                image_local_path = os.path.join(instance_dir, image_name)
-
-                cow_name = image_name + "__cow__.qcow2"
-                cow_path = os.path.join(instance_dir, cow_name)
-
-                # If a file with a suffix of __cow__.qcow2 exists in the
-                # instance directory, it means that we were using
-                # copy-on-write.
-                if os.path.exists(cow_path):
-                    # If the base image is from a shared location (started with
-                    # file:///), make a copy in the instance directory first
-                    if not os.path.exists(image_local_path):
-                        shutil.copy(lf.path, image_local_path)
-                    else:
-                        # If the base image is linked from the cache, make a
-                        # copy and replace the link by it
-                        filestat = os.stat(image_local_path)
-                        if filestat[stat.ST_NLINK] > 1:
-                            tmpfile = tempfile.mkstemp(dir=instance_dir)
-                            os.close(tmpfile[0])
-                            tmpfilename = tmpfile[1]
-                            shutil.copy(image_local_path, tmpfilename)
-                            os.unlink(image_local_path)
-                            os.rename(tmpfilename, image_local_path)
-                            # Add write permissions to the image
-                            os.chmod(image_local_path, 0600)
-
-                    # Commit the changes back into the backing image.
-                    lf.path = self._commit_cow_file(image_local_path, cow_path)
-
+        
         for lf in local_file_set.flist():
             
             # The following edit is applicable for either case, if unprop target
@@ -380,19 +325,6 @@ class DefaultImageEditing:
     def _gunzip_file_inplace(self, path):
         self.c.log.info("gunzipping '%s'" % path)
         try:
-            # Since gunzip chokes when you give it a file not ending in .gz,
-            # remove anything after the last .gz (query string params etc)
-            gzindex = path.rfind(".gz")
-            clean_path = path[:gzindex] + ".gz"
-            if clean_path != path:
-                try:
-                    shutil.move(path, clean_path)
-                    path = clean_path
-                except:
-                    errmsg = "problem renaming %s to %s" % (path, clean_path)
-                    log.exception(errmsg)
-                    raise UnexpectedError(errmsg)
-
             cmd = "gunzip %s" % path
             if self.c.dryrun:
                 self.c.log.debug("dryrun, command is: %s" % cmd)
@@ -405,7 +337,7 @@ class DefaultImageEditing:
                 self.c.log.error(errmsg)
                 raise UnexpectedError(errmsg)
             else:
-                self.c.log.info("ungzip'd '%s'" % path)
+                self.c.log.info("ungzip'd '%s'" + path)
                 newpath = path[:-3] # remove '.gz'
                 if not os.path.exists(newpath):
                     errstr = "gunzip'd %s but the expected result file does not exist: '%s'" % newpath
@@ -420,100 +352,6 @@ class DefaultImageEditing:
                 exceptname = exception_type
             errstr = "problem gunzipping '%s': %s: %s" % \
                    (path, str(exceptname), str(sys.exc_value))
-            self.c.log.error(errstr)
-            raise UnexpectedError(errstr)
-
-
-    # --------------------------------------------------------------------------
-    # COPY-ON-WRITE IMPL
-    # --------------------------------------------------------------------------
-
-    # returns newfilename
-    def _create_cow_file(self, path, instance_dir):
-
-        if instance_dir is None:
-            self.c.log.warn("skipping copy-on-write volume creation because instance_dir is None")
-            return path
-
-        self.c.log.info("creating copy-on-write volume for base image '%s'" % path)
-
-        image_name = os.path.basename(path)
-        cow_name = image_name + "__cow__.qcow2"
-        newpath = os.path.join(instance_dir, cow_name)
-
-        if os.path.exists(newpath):
-            errstr = "copy-on-write file already exists: '%s'" % newpath
-            self.c.log.error(errstr)
-            raise UnexpectedError(errstr)
-
-        # Create the copy-on-write volume
-        cmd = "%s create -f qcow2 -o backing_file=%s %s" % (self.qemu_img_path, path, newpath)
-        if self.c.dryrun:
-            self.c.log.debug("dryrun, command is: %s" % cmd)
-            return newpath
-
-        (ret, output) = getstatusoutput(cmd)
-        if ret:
-            errmsg = "problem running command: '%s' ::: return code" % cmd
-            errmsg += ": %d ::: output:\n%s" % (ret, output)
-            self.c.log.error(errmsg)
-            raise UnexpectedError(errmsg)
-        else:
-            errstr = "successfully created copy-on-write volume '%s' for image '%s'" % (newpath, path)
-            self.c.log.info(errstr)
-
-        return newpath
-
-    def _commit_cow_file(self, image_local_path, cow_path):
-        self.c.log.info("committing copy-on-write changes of '%s' into '%s'" % (cow_path, image_local_path))
-
-        try:
-            cmd = "%s | grep rebase" % self.qemu_img_path
-            if self.c.dryrun:
-                self.c.log.debug("dryrun, command is: %s" % cmd)
-            else:
-                (ret, output) = getstatusoutput(cmd)
-                if ret:
-                    errmsg = "%s is missing the rebase command required for unpropagation of copy-on-write images. " % self.qemu_img_path
-                    errmsg += "QEMU 0.13 or later is needed."
-                    self.c.log.error(errmsg)
-                    raise UnexpectedError(errmsg)
-
-            cmd = "%s rebase -f qcow2 -u -b %s %s" % (self.qemu_img_path, image_local_path, cow_path)
-            if self.c.dryrun:
-                self.c.log.debug("dryrun, command is: %s" % cmd)
-            else:
-                (ret, output) = getstatusoutput(cmd)
-                if ret:
-                    errmsg = "problem running command: '%s' ::: return code" % cmd
-                    errmsg += ": %d ::: output:\n%s" % (ret, output)
-                    self.c.log.error(errmsg)
-                    raise UnexpectedError(errmsg)
-
-            self.c.log.info("rebased '%s'" % cow_path)
-
-            cmd = "%s commit %s" % (self.qemu_img_path, cow_path)
-            if self.c.dryrun:
-                self.c.log.debug("dryrun, command is: %s" % cmd)
-            else:
-                (ret, output) = getstatusoutput(cmd)
-                if ret:
-                    errmsg = "problem running command: '%s' ::: return code" % cmd
-                    errmsg += ": %d ::: output:\n%s" % (ret, output)
-                    self.c.log.error(errmsg)
-                    raise UnexpectedError(errmsg)
-
-            self.c.log.info("committed '%s' into '%s'" % (cow_path, image_local_path))
-            return image_local_path
-
-        except:
-            exception_type = sys.exc_type
-            try:
-                exceptname = exception_type.__name__
-            except AttributeError:
-                exceptname = exception_type
-            errstr = "problem committing '%s': %s: %s" % \
-                   (cow_path, str(exceptname), str(sys.exc_value))
             self.c.log.error(errstr)
             raise UnexpectedError(errstr)
 
@@ -596,29 +434,9 @@ class DefaultImageEditing:
             
         error = None
         try:
-            f = open(imagepath, 'r')
-            magic = f.read(4)
-
-            # Version number (1 or 2) is in big endian format.
-            # We only support version 2 (qcow2).
-            be_version = f.read(4)
-            version = struct.unpack('>I', be_version)[0]
-            f.close()
-
-            if magic[0:3] == 'QFI':
-                if version == 2:
-                    if self.qcow2_enabled:
-                        # Mounting the partition as a qcow2 image
-                        cmd = "%s %s qcowone %s %s %s %s" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst)
-                        error = self._doOneMountCopyInnerTask(src, cmd)
-                    else:
-                        raise IncompatibleEnvironment("qcow2 image detected, but qcow2 support is disabled in mount.conf")
-                else:
-                    raise IncompatibleEnvironment("qcow image detected with unsupported version number %d" % version)
-            else:
-                offsetint = self._guess_offset(imagepath)
-                cmd = "%s %s hdone %s %s %s %s %d" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst, offsetint)
-                error = self._doOneMountCopyInnerTask(src, cmd)
+            offsetint = self._guess_offset(imagepath)
+            cmd = "%s %s hdone %s %s %s %s %d" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst, offsetint)
+            error = self._doOneMountCopyInnerTask(src, cmd)
         except Exception,e:
             error = e
         
@@ -660,11 +478,7 @@ fdisk, but that did not work either:
             return IncompatibleEnvironment("source file in mount+copy task does not exist: %s" % src)
 
         try:
-            self.c.log.debug("mount-alter, command is: %s" % cmd)
             ret,output = getstatusoutput(cmd)
-            if output:
-                self.c.log.debug("mount alter rc: %d output: %s" % (ret, output))
-
             if ret:
                 errmsg = "problem running command: '%s' ::: return code" % cmd
                 errmsg += ": %d ::: output:\n%s" % (ret, output)
@@ -693,7 +507,6 @@ fdisk, but that did not work either:
                 
     def _guess_offset(self, imagepath):
         
-        self.c.log.debug("guessing offset for HD image %s" % (imagepath))
         if not self.fdisk_path:
             raise InvalidConfig("image editing is being requested but that functionality has been disabled for HD images due to the lack of an fdisk program configuration")
         

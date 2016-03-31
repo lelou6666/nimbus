@@ -4,12 +4,11 @@ _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 
 _NIMBUS_LEFT2_COLUMN
 
-_NIMBUS_LEFT2_DEV1_SIDEBAR(n,n,n,n,n,n,y,n,n)
+_NIMBUS_LEFT2_DEV1_SIDEBAR(n,n,n,n,n,n,y,n)
 
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_IS_DEPRECATED
-
+_NIMBUS_2_5_DEPRECATED
 
 <h2>Making releases</h2>
 
@@ -18,27 +17,45 @@ _NIMBUS_IS_DEPRECATED
 <h4>Main tarballs _NAMELINK(main-tarballs)</h4>
 
 <p>
-    Cutting a new release is automated, you use the
-    <b>./scripts/make-dist.sh</b> script after double-checking version 
-    strings across the code repository:
+    Cutting a new release is mostly automated but there are still manual
+    steps that must be taken.
 </p>
-<ul>
-    <li>scripts/lib/gt4.0/brokerdist/build.properties</li>
-    <li>scripts/lib/gt4.0/dist/build.properties</li>
-    <li>cloud-client/builder/environment.sh</li>
-    <li>control/src/python/workspacecontrol/main/wc_optparse.py</li>
-    <li>pilot/workspacepilot.py</li>
-    <li>cumulus/authz/pynimbusauthz/__init__.py</li>
-</ul>
+
+<ol>
+    <li>
+        <p>
+            Test from a clean CVS checkout.
+        </p>
+    </li>
+    <li>
+        <p>
+            Tag CVS with final tag, convention is now "nimbus-TP2_1", 
+            "nimbus-TP2_2", etc.
+        </p>
+    </li>
+    <li>_EXAMPLE_GENERICCMD_BEGIN
+cd vm/bin/lib/gt4.0/dist
+_EXAMPLE_CMD_END
+    </li>
+    <li>Edit the version number in this file: _EXAMPLE_GENERICCMD_BEGIN
+emacs/vi/nano build.properties
+_EXAMPLE_CMD_END
+    </li>
+    <li>_EXAMPLE_GENERICCMD_BEGIN
+ant create-dist
+_EXAMPLE_CMD_END
+    </li>
+    <li>_EXAMPLE_GENERICCMD_BEGIN
+scp -r result/* USERNAME@cvs.globus.org:/www/workspace.globus.org/downloads/
+_EXAMPLE_CMD_END
+    </li>
+</ol>
 
 <p>
-    You can also use a script that does this all on a remote node where
-    a webserver resides.  This is what the Nimbus committers uses on the
-    nimbusproject.org web server to cut every set of release tarballs
-    and any intermediate ones.
-    See the original <a href="http://github.com/nimbusproject/nimbus/commit/6abab3d4cbf4d6c8692d380439da493449dba10c">commit message</a> for usage.
+    A number of documentation tasks must be completed, see
+    <a href="docs.html#new-releases">this section</a> for information
+    about those.
 </p>
-
 
 <br />
 <a name="cloud-client"> </a>
@@ -69,22 +86,23 @@ _NIMBUS_IS_DEPRECATED
 
 
 <br />
-<a name="context-agent"> </a>
-<h4>Context agent _NAMELINK(context-agent)</h4>
+<a name="context-broker-and-agent"> </a>
+<h4>Context broker and agent _NAMELINK(context-broker-and-agent)</h4>
 
 <p>
-    The context agent is released more "manually", there is no
-    release generation script, it is just a tarball of your efforts.
+    The context agent and broker are released more "manually", there is no
+    release generation script they are just tarballs of your efforts.  It's a
+    good thing to remove the CVS directories. 
 </p>
 <p>
 _EXAMPLE_GENERICCMD_BEGIN
-cp -a context-agent nimbus-ctx-agent-2.3.0
+cp -a context-agent nimbus-ctx-agent-2.3
 _EXAMPLE_CMD_END
 _EXAMPLE_GENERICCMD_BEGIN
-find nimbus-ctx-agent-2.3.0 -name CVS -type d -print -exec rm -rf {} \;
+find nimbus-ctx-agent-2.3 -name CVS -type d -print -exec rm -rf {} \;
 _EXAMPLE_CMD_END
 _EXAMPLE_GENERICCMD_BEGIN
-tar cvzf nimbus-ctx-agent-2.3.0.tar.gz nimbus-ctx-agent-2.3.0
+tar cvzf nimbus-ctx-agent-2.3.tar.gz nimbus-ctx-agent-2.3
 _EXAMPLE_CMD_END
 </p>
 

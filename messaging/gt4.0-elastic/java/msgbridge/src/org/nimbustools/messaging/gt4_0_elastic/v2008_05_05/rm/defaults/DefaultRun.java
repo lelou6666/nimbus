@@ -23,7 +23,6 @@ import org.nimbustools.api._repr._CreateRequest;
 import org.nimbustools.api._repr._CustomizationRequest;
 import org.nimbustools.api._repr.vm._NIC;
 import org.nimbustools.api.brain.ModuleLocator;
-import org.nimbustools.api.defaults.repr.vm.DefaultKernel;
 import org.nimbustools.api.repr.Caller;
 import org.nimbustools.api.repr.CannotTranslateException;
 import org.nimbustools.api.repr.CreateRequest;
@@ -36,7 +35,7 @@ import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.State;
 import org.nimbustools.api.repr.vm.VM;
 import org.nimbustools.api.repr.vm.VMFile;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.*;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.*;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.Networks;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.ResourceAllocations;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.Repository;
@@ -47,8 +46,6 @@ import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.Run;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.SSHKey;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.SSHKeys;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.rmi.RemoteException;
 
 public class DefaultRun implements Run {
@@ -183,12 +180,12 @@ public class DefaultRun implements Run {
             custRequests = null;
         }
 
+        final NIC[] nics = this.getNICs();
         final String raType = req.getInstanceType();
         final ResourceAllocation ra = this.RAs.getMatchingRA(raType,
                                                              req.getMinCount(),
-                                                             req.getMaxCount(),
-                                                             false);
-        final NIC[] nics = this.getNICs(ra.getPublicNetwork(), ra.getPrivateNetwork());
+                                                             req.getMaxCount());
+
         final RequiredVMM reqVMM = this.RAs.getRequiredVMM();
 
         String userData = null;
@@ -196,14 +193,11 @@ public class DefaultRun implements Run {
         if (t_userData != null) {
             final String base64Encoded = t_userData.getData();
             if (base64Encoded != null) {
-                // Remove newlines from the base64 string since they are not
-                // supported by the Globus implementation
-                final String base64EncodedNoCRLF = base64Encoded.replaceAll("[\r\n]", "");
-                if (!Base64.isBase64(base64EncodedNoCRLF)) {
+                if (!Base64.isBase64(base64Encoded)) {
                     throw new RemoteException("userdata does not appear to " +
                             "be base64 encoded?");
                 }
-                final byte[] bytes = Base64.decode(base64EncodedNoCRLF.getBytes());
+                final byte[] bytes = Base64.decode(base64Encoded.getBytes());
                 userData = new String(bytes);
             }
         }
@@ -211,27 +205,7 @@ public class DefaultRun implements Run {
         final VMFile[] files =
                 this.repository.constructFileRequest(imageID, ra, caller);
 
-        final String clientToken = req.getClientToken();
-
-        String availabilityZone = null;
-        if (req.getPlacement() != null) {
-            availabilityZone = req.getPlacement().getAvailabilityZone();
-        }
-
-
         final _CreateRequest creq = this.repr._newCreateRequest();
-
-        DefaultKernel kernel = null;
-        String kernelRequestString = req.getKernelId();
-        if (kernelRequestString != null) {
-            kernel = new DefaultKernel();
-            try {
-                URI kernelURI = new URI("file://" + kernelRequestString);
-                kernel.setKernel(kernelURI);
-            } catch(URISyntaxException ueie) {
-                throw new RemoteException(ueie.toString());
-            }
-        }
 
         creq.setContext(null);
         creq.setCoScheduleDone(false);
@@ -240,7 +214,7 @@ public class DefaultRun implements Run {
         creq.setCustomizationRequests(custRequests);
         creq.setInitialStateRequest(State.STATE_Running);
         creq.setName(imageID);
-        creq.setRequestedKernel(kernel); // todo
+        creq.setRequestedKernel(null); // todo
         creq.setRequestedNics(nics);
         creq.setRequestedRA(ra);
         creq.setRequestedSchedule(null); // ask for default
@@ -249,8 +223,6 @@ public class DefaultRun implements Run {
         creq.setVMFiles(files);
         creq.setMdUserData(userData);
         creq.setSshKeyName(keyname);
-        creq.setClientToken(clientToken);
-        creq.setRequestedResourcePool(availabilityZone);
 
         return creq;
     }
@@ -283,13 +255,13 @@ public class DefaultRun implements Run {
 
         final String vmidWhenJustOne;
         final String resID;
-        // these mappings may exist already, for secondary idempotent launches
         if (groupid == null) {
             vmidWhenJustOne = vms[0].getID();
-            resID = this.ids.getOrNewInstanceReservationID(vmidWhenJustOne, sshKeyName);
+            resID = this.ids.newGrouplessInstanceID(vmidWhenJustOne,
+                                                    sshKeyName);
         } else {
             vmidWhenJustOne = null;
-            resID = this.ids.getOrNewGroupReservationID(groupid);
+            resID = this.ids.newGroupReservationID(groupid);
         }
 
         final RunningInstancesSetType rist = new RunningInstancesSetType();
@@ -316,8 +288,7 @@ public class DefaultRun implements Run {
                 // mapping already created:
                 instID = this.ids.managerInstanceToElasticInstance(vmidWhenJustOne);
             } else {
-                // this mapping may exist already, for secondary idempotent launches
-                instID = this.ids.getOrNewInstanceID(vm.getID(), resID, sshKeyName);
+                instID = this.ids.newInstanceID(vm.getID(), resID, sshKeyName);
             }
 
             if (i != 0) {
@@ -332,7 +303,7 @@ public class DefaultRun implements Run {
         logger.info(buf.toString());
 
         final RunInstancesResponseType ret = new RunInstancesResponseType();
-        ret.setGroupSet(getGroupStub());
+        ret.setGroupSet(this.getGroupStub());
         final String ownerID = this.container.getOwnerID(caller);
         if (ownerID == null) {
             throw new CannotTranslateException("Cannot find owner ID");
@@ -351,7 +322,7 @@ public class DefaultRun implements Run {
     // NETWORK REQUEST
     // -------------------------------------------------------------------------
 
-    protected NIC[] getNICs(String publicNetworkName, String privateNetworkName) throws CannotTranslateException {
+    protected NIC[] getNICs() throws CannotTranslateException {
 
         // if the network mappings are the same value, that currently means
         // only make one real NIC request
@@ -365,37 +336,7 @@ public class DefaultRun implements Run {
         }
 
         final NIC[] nics;
-
-        /* Check that when one of public and private is set, they are both set */
-        if (publicNetworkName != null && !publicNetworkName.trim().equals("")) {
-            if (privateNetworkName == null || privateNetworkName.trim().equals("")) {
-                throw new CannotTranslateException("Illegal Networks " +
-                        "implementation, public network set but null private network mapping");
-            }
-        }
-        if (privateNetworkName != null && !privateNetworkName.trim().equals("")) {
-            if (publicNetworkName == null || publicNetworkName.trim().equals("")) {
-                throw new CannotTranslateException("Illegal Networks " +
-                        "implementation, private network set but null public network mapping");
-            }
-        }
-
-        if (publicNetworkName != null && !publicNetworkName.trim().equals("")) {
-            if (publicNetworkName.trim().equals(privateNetworkName.trim())) {
-                nics = new NIC[1];
-                publicNetworkName = publicNetworkName.trim();
-                logger.info("Using network name " + publicNetworkName);
-                nics[0] = this.oneRequestedNIC(publicNetworkName, "autoeth0");
-            } else {
-                nics = new NIC[2];
-                publicNetworkName = publicNetworkName.trim();
-                privateNetworkName = privateNetworkName.trim();
-                logger.info("Using public network name " + publicNetworkName + " and private network name " + privateNetworkName);
-                nics[0] = this.oneRequestedNIC(publicNetworkName, "autoeth0");
-                nics[1] = this.oneRequestedNIC(privateNetworkName, "autoeth1");
-            }
-        }
-        else if (pubNet.equals(privNet)) {
+        if (pubNet.equals(privNet)) {
             nics = new NIC[1];
             nics[0] = this.oneRequestedNIC(pubNet, "autoeth0");
         } else {
@@ -425,7 +366,7 @@ public class DefaultRun implements Run {
     // -------------------------------------------------------------------------
 
     // todo: duped code; support groups
-    public static GroupSetType getGroupStub() {
+    protected GroupSetType getGroupStub() {
         final GroupItemType[] groupItemTypes = new GroupItemType[1];
         groupItemTypes[0] = new GroupItemType("default");
         return new GroupSetType(groupItemTypes);
@@ -452,7 +393,7 @@ public class DefaultRun implements Run {
         riit.setInstanceState(this.describe.getState(vm));
         riit.setReason(this.describe.getReason(vm));
         riit.setPlacement(this.describe.getPlacement());
-        riit.setImageId(this.describe.getImageID(vm.getVMFiles()));
+        riit.setImageId(this.describe.getImageID(vm));
         riit.setInstanceType(this.describe.getInstanceType(vm));
         riit.setLaunchTime(this.describe.getLaunchTime(vm));
         
@@ -462,13 +403,12 @@ public class DefaultRun implements Run {
         riit.setInstanceId(instID);
         riit.setKeyName(sshKeyName);
 
-        riit.setClientToken(vm.getClientToken());
 
         riit.setKernelId("default"); // todo
 
         riit.setMonitoring(new InstanceMonitoringStateType("disabled"));
-        riit.setProductCodes(new ProductCodesSetType(new ProductCodesSetItemType[]{}));
 
+        //riit.setProductCodes();
         //riit.setRamdiskId();
         //riit.setReason();
 
@@ -479,21 +419,6 @@ public class DefaultRun implements Run {
                                     RunningInstancesItemType riit)
             throws CannotTranslateException {
 
-
-        // ec2 only necessarily has networking information on a running
-        // instance. we can loosen up requirements here.
-
-        // this is motivated by idempotent instance support. In cases where
-        // an idempotent launch maps to an already-terminated instance,
-        // the VM object here will be in the terminated state and have no
-        // NICs information
-
-        final boolean isTerminated =
-                vm.getState().getState().equals(State.STATE_Cancelled);
-
-        if (isTerminated && (vm.getNics() == null || vm.getNics().length == 0)) {
-            return;
-        }
 
         final NIC[] nics = vm.getNics();
         if (nics == null || nics.length == 0) {
@@ -565,11 +490,6 @@ public class DefaultRun implements Run {
         String privateAssignedIp = null;
         String publicAssignedIp = null;
 
-        if (netName2 != null) {
-            logger.info("Using networks " + netName + " and " + netName2);
-        } else {
-            logger.info("Using network " + netName);
-        }
         if (this.networks.isPrivateNetwork(netName)) {
             riit.setPrivateDnsName(hostname);
             riit.setPrivateIpAddress(ipAddress);

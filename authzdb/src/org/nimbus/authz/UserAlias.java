@@ -50,10 +50,4 @@ public class UserAlias {
     public String getAliasTypeData() {
         return aliasTypeData;
     }
-
-    public String toString() {
-
-        return "userID: '" + userId + "' aliasName: '" + aliasName + "' friendlyName: '" + friendlyName
-                + "' aliasType: '" + aliasType + "' aliasTypeData: '" + aliasTypeData + "'";
-    }
 }

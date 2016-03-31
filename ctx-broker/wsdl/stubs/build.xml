@@ -39,7 +39,6 @@
          ******************************************************************* -->
 
     <target name="disp">
-        <echo message="" />
         <echo message="**** Module: ${basedir}" />
     </target>
     

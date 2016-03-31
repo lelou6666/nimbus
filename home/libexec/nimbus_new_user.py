@@ -4,20 +4,16 @@
 Creates new Nimbus users.  It will create all needed user aliases (Cumulus,
 x509, and web login id)
 """
-import sys
-try:
-    import pycb
-except Exception, ex:
-    print ex
-    print "Error:  please verify that your cumulus.ini file points the correct database"
-    sys.exit(1)
 from nimbusweb.setup import autoca
 import string
 import random
 import os
+import sys
+import sys
 import ConfigParser
 from ConfigParser import SafeConfigParser
 import time
+import pycb
 import pycb.tools
 import pynimbusauthz
 import tempfile
@@ -31,7 +27,6 @@ import shlex
 from nimbusweb.setup.setuperrors import *
 from nimbusweb.setup.groupauthz import *
 from optparse import SUPPRESS_HELP
-import shutil
 
 g_report_options = ["cert", "key", "dn", "canonical_id", "access_id", "access_secret", "url", "web_id", "cloud_properties"]
 
@@ -92,7 +87,8 @@ def remove_gridmap(dn):
         print "WARNING! user not found in %s" % (dn)
     os.close(nf)
     f.close()
-    shutil.move(new_name, gmf)
+    os.unlink(gmf)
+    os.rename(new_name, gmf)
 
 def generate_cert(o):
     nimbus_home = get_nimbus_home()
@@ -131,12 +127,6 @@ def generate_cert(o):
     cn = o.cn
     if not cn:
         cn = o.emailaddr
-    # check for illegal characters in emailaddr
-    bad_chars = "+"
-    for c in bad_chars:
-        if c in cn:
-            raise CLIError('ECMDLINE', "The character %s is not allowed in the common name" % (c))
-
     # XXX
     log = logging.getLogger()
     dn = autoca.createCert(cn, webdir, cadir, certpath, keypath, log)
@@ -210,7 +200,7 @@ Create/edit a nimbus user
     all_opts.append(opt)
     opt = cbOpts("dest", "d", "The directory to put all of the new files into.", None)
     all_opts.append(opt)
-    opt = cbOpts("group", "g", "Put this user in the given group", "01")
+    opt = cbOpts("group", "g", "Put this user in the given group", "01", vals=("01", "02", "03", "04"))
     all_opts.append(opt)
     opt = cbOpts("web_id", "w", "Set the web user name.  If not set and a web user is desired a username will be created from the email address.", None)
     all_opts.append(opt)
@@ -243,7 +233,6 @@ Create/edit a nimbus user
         nh = get_nimbus_home() + "/var/ca/"
         o.dest = tempfile.mkdtemp(suffix='cert', prefix='tmp', dir=nh)
     else:
-        o.dest = os.path.abspath(o.dest)
         try:
             os.mkdir(o.dest)
         except:
@@ -375,15 +364,9 @@ def do_group_bidnes(o):
     nh = get_nimbus_home()
     groupauthz_dir = os.path.join(nh, "services/etc/nimbus/workspace-service/group-authz/")
     if o.group:
-        try:
-            add_member(groupauthz_dir, o.dn, o.group)
-        except InvalidGroupError:
-            raise CLIError('EUSER', "Authz group '%s' does not exist" % o.group)
+        add_member(groupauthz_dir, o.dn, int(o.group))
     else:
-        try:
-            add_member(groupauthz_dir, o.dn)
-        except InvalidGroupError, e:
-            raise CLIError('EUSER', "Problem adding user to default authz group: " + str(e))
+        add_member(groupauthz_dir, o.dn)
 
 def report_results(o, db):
     user = User.get_user_by_friendly(db, o.emailaddr)

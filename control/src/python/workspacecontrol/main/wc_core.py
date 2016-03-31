@@ -211,8 +211,7 @@ def _core(vm_name, action, p, c):
                     exceptname = exception_type
                 errstr = "Issue with shutdown/destroy: %s: %s" % (str(exceptname), str(sys.exc_value))
                 c.log.error(errstr)
-                raise
-
+        
         vacate_networking(c, netbootstrap, netsecurity, netlease, vm_name, nic_set, persistence)
         c.log.info("vacated '%s' from workspace-control (networking)" % vm_name)
         
@@ -327,14 +326,7 @@ def graceful_shutdown(p, c, platform, vm_name, running_vm):
     while count > 0:
         time.sleep(interval)
         c.log.debug("checking on VM '%s'" % vm_name)
-        try:
-            running_vm = platform.info(vm_name)
-        except UnexpectedError:
-            # Try a second time in case the VM was deleted after _get_vm_by_handle was called
-            # This should return None if the VM is gone.
-            # If there is still an exception, it should be a genuine error, so let it bubble up.
-            running_vm = platform.info(vm_name)
-
+        running_vm = platform.info(vm_name)
         if running_vm:
             if running_vm.shutoff:
                 c.log.debug("VM '%s' is now in the shutoff state" % vm_name)

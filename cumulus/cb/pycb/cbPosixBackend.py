@@ -2,8 +2,12 @@ import os
 import sys
 from pycb.cbException import cbException
 import pycb
+import stat
+import urllib
+import glob
 import errno
 import logging
+import threading
 import tempfile
 import hashlib
 import traceback
@@ -101,6 +105,15 @@ class cbPosixBackend(object):
 class cbPosixData(object):
 
     def __init__(self, data_key, access="r", openIt=True):
+#       file like stuff
+        #self.closed = True
+        #self.encoding = 
+        #self.errors
+        #self.mode
+        #self.name
+        #self.newlines
+        #self.softspace
+
         self.fname = data_key
         self.metafname = data_key + ".meta"
         self.data_key = data_key
@@ -108,19 +121,14 @@ class cbPosixData(object):
         self.hashValue = None
         self.delete_on_close = False
         self.md5er = hashlib.md5()
-        self.access = access
-
-        self.seek_count = 0
 
         if not openIt:
             return
 
         try:
-            # this allows head to be very fast
-            if access == "r":
-                mFile = open(self.metafname, 'r')
-                self.hashValue = mFile.readline()
-                mFile.close()
+            mFile = open(self.metafname, 'r')
+            self.hashValue = mFile.readline()
+            mFile.close()
         except:
             pass
 
@@ -194,21 +202,15 @@ class cbPosixData(object):
 
     def read(self, size=None):
         if size == None:
-            st = self.file.read(self.blockSize)
+            return self.file.read(self.blockSize)
         else:
-            st = self.file.read(size)
-        self.md5er.update(st)
-        return st
+            return self.file.read(size)
 
 #    def readline(self, size=None):
 #    def readlines(self, size=None):
 #    def xreadlines(self):
 
     def seek(self, offset, whence=None):
-        self.seek_count = self.seek_count + 1
-        pycb.log(logging.WARNING, "Someone is seeking %s %d :: %d" % (self.fname, offset, self.seek_count), tb=traceback)
-        if self.seek_count > 1:
-            raise cbException('InternalError')
         return self.file.seek(offset, whence)
 
 

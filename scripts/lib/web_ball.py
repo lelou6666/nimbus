@@ -4,10 +4,7 @@ import os
 import uuid
 
 def newball(builddir=None, webdir=None, printbase=None, gitref=None):
-   
-    print "HI!"
-    run("hostname")
- 
+    
     if not builddir:
         raise Exception("builddir required")
     if not webdir:
@@ -72,7 +69,6 @@ def _make_dist(builddir, current_commit_hash):
     with cd(builddir):
         run("mkdir %s" % result_dir)
         run("./scripts/make-dist.sh %s %s" % (result_dir, builddir))
-        run("./scripts/broker-make-dist.sh %s %s" % (result_dir, builddir))
 
     return result_dir
 
@@ -86,7 +82,7 @@ def _make_available(result_dir, webdir):
     run("mv %s %s" % (result_dir, webdir))
     
     with cd(target_dir):
-        files = run("ls -1")
+        files = run("ls")
         filelist = files.split("\n")
         md5sums = run("md5sum *")
 

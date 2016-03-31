@@ -1,7 +1,6 @@
 import fcntl
 import os
 import sys
-import time
 import zope.interface
 import libvirt
 
@@ -15,9 +14,6 @@ import lvrt_adapter_kvm0
 import lvrt_adapter_mock
 import lvrt_model
 
-DESTROY_DESTROY = "destroy"
-DESTROY_SHUTDOWN = "shutdown"
-
 class Platform:
     zope.interface.implements(workspacecontrol.api.modules.IPlatform)
     
@@ -26,7 +22,6 @@ class Platform:
         self.xen3 = False
         self.kvm0 = False
         self.create_flock = False
-        self.destroy_method = DESTROY_DESTROY
         
         if params == None:
             raise ProgrammingError("expecting params")
@@ -59,27 +54,6 @@ class Platform:
             self.xen3 = True
         else:
             raise InvalidConfig("Unknown 'vmm' configuration in libvirt conf: '%s'" % adapter_conf)
-            
-        destroy_method = self.p.get_conf_or_none("libvirt", "destroy_method")
-        if destroy_method is None:
-            self.c.log.debug("no destroy_method configured, assuming %s" % DESTROY_DESTROY)
-        elif destroy_method == DESTROY_DESTROY:
-            self.c.log.debug("destroy_method: %s" % DESTROY_DESTROY)
-        elif destroy_method == DESTROY_SHUTDOWN:
-            self.c.log.debug("destroy_method: %s" % DESTROY_SHUTDOWN)
-            self.destroy_method = DESTROY_SHUTDOWN
-        else:
-            raise InvalidConfig("Unknown 'destroy_method' configuration in libvirt conf: '%s'" % destroy_method)
-        
-        if self.destroy_method == DESTROY_SHUTDOWN:
-            shutdown_grace = self.p.get_conf_or_none("libvirt", "shutdown_grace")
-            try:
-                self.shutdown_grace = int(shutdown_grace)
-                self.c.log.debug("shutdown_grace: %d" % self.shutdown_grace)
-            except ValueError:
-                raise InvalidConfig("The 'shutdown_grace' configuration in libvirt conf is not an integer: '%s'" % shutdown_grace)
-            if self.shutdown_grace < 1:
-                raise InvalidConfig("The 'shutdown_grace' configuration in libvirt conf is illegal, must be >= 1: '%s'" % shutdown_grace)
     
     def validate(self):
         
@@ -90,14 +64,8 @@ class Platform:
         vmm = self._vmm()
         domainIds = vmm.listDomainsID()
         for did in domainIds:
-            try:
-                avm = vmm.lookupByID(did)
-                self.c.log.debug("Found VM: id #%s, name '%s'" % (did, avm.name()))
-            except libvirt.libvirtError,e:
-                if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
-                    self.c.log.debug("VM disappeared: id #%s, name '%s'" % (did, avm.name()))
-                else:
-                    raise
+            avm = vmm.lookupByID(did)
+            self.c.log.debug("Found VM: id #%s, name '%s'" % (did, avm.name()))
             
     def create(self, local_file_set, nic_set, kernel):
         """create launches a VM"""
@@ -152,13 +120,7 @@ class Platform:
             err = "could not find VM with name '%s'" % name
             raise UnexpectedError(err)
         try:
-            if self.destroy_method == DESTROY_SHUTDOWN:
-                vm.shutdown()
-                # Simplest implementation is to wait the full grace period
-                time.sleep(self.shutdown_grace)
-                vm.destroy()
-            else:
-                vm.destroy()
+            vm.destroy()
         except libvirt.libvirtError,e:
             shorterr = "Problem destroying the '%s' VM: %s" % (name, str(e))
             self.c.log.error(shorterr)
@@ -193,13 +155,8 @@ class Platform:
             shorterr = "Problem rebooting the '%s' VM: %s" % (name, str(e))
             self.c.log.error(shorterr)
             self.c.log.exception(e)
-
-            # Raise exception only if VM is not running anymore
-            # The service will mark it as corrupted
-            vm = self.info(name)
-            if not vm.running:
-                raise UnexpectedError(shorterr)
-
+            raise UnexpectedError(shorterr)
+       
     def pause(self, running_vm):
         """pause pauses a running VM in place"""
         name = running_vm.wchandle
@@ -241,21 +198,15 @@ class Platform:
             return None
         
         self.c.log.debug("found VM with name '%s'" % handle)
-
-        try:
-            rvm_cls = self.c.get_class_by_keyword("RunningVM")
-            rvm = rvm_cls()
-            rvm.wchandle = handle
-            rvm.vmm_id = vm.ID()
-            rvm.vmm_uuid = vm.UUIDString()
-            rvm.xmldesc = vm.XMLDesc(0)
-            rvm.ostype = vm.OSType()
-        except libvirt.libvirtError, e:
-            shorterr = "Problem getting info from the VMM: %s" % str(e)
-            self.c.log.error(shorterr)
-            self.c.log.exception(e)
-            raise UnexpectedError(shorterr)
-
+            
+        rvm_cls = self.c.get_class_by_keyword("RunningVM")
+        rvm = rvm_cls()
+        rvm.wchandle = handle
+        rvm.vmm_id = vm.ID()
+        rvm.vmm_uuid = vm.UUIDString()
+        rvm.xmldesc = vm.XMLDesc(0)
+        rvm.ostype = vm.OSType()
+        
         infolist = vm.info()
         if not infolist:
             raise UnexpectedError("Problem obtaining VM information from libvirt")
@@ -291,7 +242,7 @@ class Platform:
         if state == DOM_STATE_NOSTATE:
             # this is the case right after a graceful shutdown succeeds
             self.c.log.debug("found VM with name '%s' but it has no state -- from the perspective 'above' this means it was not found at all." % handle)
-            return rvm
+            return None
             
         if state == DOM_STATE_RUNNING:
             rvm.running = True
@@ -426,10 +377,7 @@ class Platform:
         Return complete and valid instance of lvrt_model.Domain
         """
         
-        template = self.p.get_conf_or_none("libvirt", "template")
-        if not os.path.isabs(template):
-            template = self.c.resolve_etc_dir(template)
-        dom = lvrt_model.Domain(template=template)
+        dom = lvrt_model.Domain()
         dom.os = lvrt_model.OS()
         dom.devices = lvrt_model.Devices()
         

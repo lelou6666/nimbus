@@ -16,11 +16,14 @@
 
 package org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.defaults;
 
+import net.sf.ehcache.Cache;
+import net.sf.ehcache.Element;
 import org.nimbustools.messaging.gt4_0_elastic.DisabledException;
-import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.ElasticPersistence;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.SSHKey;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.SSHKeys;
 
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 public class DefaultSSHKeys implements SSHKeys {
@@ -36,7 +39,8 @@ public class DefaultSSHKeys implements SSHKeys {
     // INSTANCE VARIABLES
     // -------------------------------------------------------------------------
 
-    final private ElasticPersistence persistence;
+    // key: 'ownerID',  value: List of SSHKey objects
+    private final Cache sshKeyCache;
 
     protected boolean pubkeyOnly;
     protected String splitToken;
@@ -46,12 +50,17 @@ public class DefaultSSHKeys implements SSHKeys {
     // CONSTRUCTORS
     // -------------------------------------------------------------------------
 
-    public DefaultSSHKeys(ElasticPersistence persistence) {
-        if (persistence == null) {
-            throw new IllegalArgumentException("persistence may not be null");
-        }
-        this.persistence = persistence;
+    public DefaultSSHKeys(KeyCacheProvider cacheLocator) {
 
+        if (cacheLocator == null) {
+            throw new IllegalArgumentException("cacheLocator may not be null");
+        }
+
+        this.sshKeyCache = cacheLocator.getKeyCache();
+        if (this.sshKeyCache == null) {
+            throw new IllegalArgumentException(
+                    "cacheLocator failed to provide key cache");
+        }
     }
 
 
@@ -112,7 +121,7 @@ public class DefaultSSHKeys implements SSHKeys {
      * @return key object or null if one cannot be found
      */
     public synchronized SSHKey findKey(String ownerID, String keyName) {
-
+        
         if (ownerID == null) {
             throw new IllegalArgumentException("ownerID may not be null");
         }
@@ -120,11 +129,26 @@ public class DefaultSSHKeys implements SSHKeys {
             throw new IllegalArgumentException("keyName may not be null");
         }
 
-        try {
-            return this.persistence.getSSHKey(ownerID, keyName);
-        } catch (Exception e) {
-            return null;
+        final Element el = this.sshKeyCache.get(ownerID);
+
+        if (el == null) {
+            return null; // *** EARLY RETURN ***
         }
+
+        final List allOwnerKeys = (List) el.getObjectValue();
+        if (allOwnerKeys.isEmpty()) {
+            return null; // *** EARLY RETURN ***
+        }
+
+        final Iterator iter = allOwnerKeys.iterator();
+        while (iter.hasNext()) {
+            final SSHKey key = (SSHKey)iter.next();
+            if (key.getKeyName().equals(keyName)) {
+                return key;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -135,18 +159,23 @@ public class DefaultSSHKeys implements SSHKeys {
      * @return all owner's key objects or zero-length array if zero are found
      */
     public synchronized SSHKey[] getOwnerKeys(String ownerID) {
-
+        
         if (ownerID == null) {
             throw new IllegalArgumentException("ownerID may not be null");
         }
 
-        try {
-            final List<SSHKey> keys = persistence.getSSHKeys(ownerID);
-            return keys.toArray(new SSHKey[keys.size()]);
+        final Element el = this.sshKeyCache.get(ownerID);
 
-        } catch (Exception e) {
-            return EMPTY_SSH_KEYS;
+        if (el == null) {
+            return EMPTY_SSH_KEYS; // *** EARLY RETURN ***
         }
+
+        final List allOwnerKeys = (List) el.getObjectValue();
+        if (allOwnerKeys.isEmpty()) {
+            return EMPTY_SSH_KEYS; // *** EARLY RETURN ***
+        }
+
+        return (SSHKey[]) allOwnerKeys.toArray(new SSHKey[allOwnerKeys.size()]);
     }
 
     /**
@@ -180,21 +209,34 @@ public class DefaultSSHKeys implements SSHKeys {
             throw new IllegalArgumentException("fingerprint may not be null");
         }
 
+        final Element el = this.sshKeyCache.get(ownerID);
+        final List allOwnerKeys;
+        if (el == null) {
+            allOwnerKeys = new LinkedList();
+            final Element newel = new Element(ownerID, allOwnerKeys);
+            this.sshKeyCache.put(newel);
+        } else {
+            allOwnerKeys = (List) el.getObjectValue();
+        }
+
+        boolean isNewKey = true;
+
+        final Iterator iter = allOwnerKeys.iterator();
+        while (iter.hasNext()) {
+            final SSHKey key = (SSHKey)iter.next();
+            if (key.getKeyName().equals(keyName)) {
+                iter.remove();
+                isNewKey = false;
+                break;
+            }
+        }
+
         final SSHKey key = new SSHKey(ownerID, keyName,
                                       pubKeyContent, fingerprint);
-
-        try {
-            final boolean exists = persistence.getSSHKey(ownerID, keyName) != null;
-
-            if (exists) {
-                persistence.updateSSHKey(key);
-            } else {
-                persistence.putSSHKey(key);
-            }
-            return !exists;
-        } catch (Exception e) {
-            return false;
-        }
+        allOwnerKeys.add(key);
+        this.sshKeyCache.flush();
+        
+        return isNewKey;
     }
 
     /**
@@ -205,7 +247,7 @@ public class DefaultSSHKeys implements SSHKeys {
      * @return true if this deleted a key
      */
     public boolean removeKey(String ownerID, String keyName) {
-
+        
         if (ownerID == null) {
             throw new IllegalArgumentException("ownerID may not be null");
         }
@@ -213,10 +255,29 @@ public class DefaultSSHKeys implements SSHKeys {
             throw new IllegalArgumentException("keyName may not be null");
         }
 
-        try {
-            return persistence.deleteSSHKey(ownerID, keyName);
-        } catch (Exception e) {
-            return false;
+        final Element el = this.sshKeyCache.get(ownerID);
+
+        if (el == null) {
+            return false; // *** EARLY RETURN ***
         }
+
+        final List allOwnerKeys = (List) el.getObjectValue();
+        if (allOwnerKeys.isEmpty()) {
+            return false; // *** EARLY RETURN ***
+        }
+
+        boolean deletedKey = false;
+
+        final Iterator iter = allOwnerKeys.iterator();
+        while (iter.hasNext()) {
+            final SSHKey key = (SSHKey)iter.next();
+            if (key.getKeyName().equals(keyName)) {
+                iter.remove();
+                deletedKey = true;
+                break;
+            }
+        }
+
+        return deletedKey;
     }
 }
