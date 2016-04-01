@@ -29,7 +29,6 @@ setup(name='pynimbusauthz',
             'nimbusauthz-stat = pynimbusauthz.stat:main',
             'nimbusauthz-ls = pynimbusauthz.ls:main',
             'nimbusauthz-chmod = pynimbusauthz.chmod:main',
-            'nimbusauthz-rebase = pynimbusauthz.rebase:main',
         ]
       },
       include_package_data = True,

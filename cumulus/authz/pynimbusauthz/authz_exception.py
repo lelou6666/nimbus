@@ -1,5 +1,7 @@
 import sqlite3
 import pynimbusauthz
+from pynimbusauthz.cmd_opts import cbOpts
+from pynimbusauthz.db import DB
 import uuid
 
 class AuthzException(Exception):
@@ -7,7 +9,6 @@ class AuthzException(Exception):
     e_types['CLI_PARAMETER'] = 32
     e_types['FILE_EXISTS'] = 33
     e_types['USER_EXISTS'] = 34
-    e_types['DB_ERROR'] = 35
 
     e_types['UNKNOWN'] = 254
     

@@ -1,12 +1,11 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.8 Zero To Cloud Guide)
+_NIMBUS_HEADER(2.5RC2 Zero To Cloud Guide)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_Z2C_SIDEBAR(y)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_IS_DEPRECATED
-
+_NIMBUS_2_5_DEPRECATED
 
 
 <h2>Final Tests</h2>
@@ -29,6 +28,9 @@ _NIMBUS_IS_DEPRECATED
 $ cd nimbus-cloud-client/
 </pre>
 <pre class="panel">
+$ ./bin/grid-proxy-init.sh
+</pre>
+<pre class="panel">
 $ ./bin/cloud-client.sh --status
 
 Querying for ALL instances.
@@ -48,37 +50,23 @@ No files.
 </p>
 <h3>Upload image</h3>
 
-<p>It is recommended to start with the image that you used earlier to test the VMM.
-   If you don't still have it, fetch it again. Remember that there is a different
-    sample image for Xen vs. KVM.
+<p>It is recommended to start with the
+    <tt class="literal">nimbus-z2c</tt> image that you used earlier to
+    test the VMM. If you don't still have it, fetch it again.
 </p>
-
-<div class="xenpanel">
 <div class="panel"><pre>
 $ wget http://www.nimbusproject.org/downloads/nimbus-z2c.gz
 $ gunzip nimbus-z2c.gz
 </pre></div>
-</div>
-
-<div class="kvmpanel">
-<div class="panel"><pre>
-$ wget http://www.nimbusproject.org/downloads/ubuntu10.10.gz
-$ gunzip ubuntu10.10.gz
-</pre></div>
-</div>
-
 <p>
     Now use the cloud-client to upload the VM image to the Cumulus repository.
-    For the following commands, replace <tt class="literal"><b><em>image</em></b></tt>
-    with the name of the image file you just unzipped. So <tt class="literal">nimbus-z2c</tt>
-    or <tt class="literal">ubuntu10.10</tt>.
 </p>
 <pre class="panel">
-$ ./bin/cloud-client.sh --transfer --sourcefile <b><em>image</em></b>
+$ ./bin/cloud-client.sh --transfer --sourcefile nimbus-z2c
 
 Transferring
-  - Source: <em>image</em>
-  - Destination: cumulus://Repo/VMS/04NjWi75iz1TzNf4Y3zvU/<em>image</em>
+  - Source: nimbus-z2c
+  - Destination: cumulus://Repo/VMS/04NjWi75iz1TzNf4Y3zvU/nimbus-z2c
 </pre>
 
 <p>
@@ -88,35 +76,16 @@ Transferring
 <pre class="panel">
 $ ./bin/cloud-client.sh --list
 
-[Image] '<em>image</em>'                     Read/write
+[Image] 'nimbus-z2c'                     Read/write
         Modified: Jun 7 2010 @ 12:43   Size: 288358400 bytes (~275 MB)
 </pre>
 <h3>Start VM</h3>
-
-<div class="kvmpanel">
-    <p>
-        For KVM you need to make an additional configuration change to the
-        <tt class="literal">cloud.properties</tt> file. You must tell Nimbus to
-        treat the image as a disk, not just a single partition. Add the following
-        line to <tt class="literal">conf/cloud.properties</tt>:
-    </p>
-    <pre class="panel">
-    vws.metadata.mountAs=hda
-    </pre>
-
-    <p>
-        Once you have everything working, you should also add this (along with any
-        other customizations) to the cloud properties template file used for new
-        users. It is located in the service installation at
-        <tt class="literal">$NIMBUS_HOME/var/cloud.properties.in</tt>.
-    </p>
-</div>
 
 <p>
     Now we are ready to boot this image and see if we can ssh into it.
 </p>
 <pre class="panel">
-$ ./bin/cloud-client.sh --run --name <b><em>image</em></b> --hours 1
+$ ./bin/cloud-client.sh --run --name nimbus-z2c --hours 1
 
 Launching workspace.
 
@@ -140,9 +109,7 @@ Waiting for updates.
     If all goes well, a VM should be booting and its IP should be
     printed to the screen. The client will not exit until the
     image is distributed and the VM is booting. When this happens,
-    you can attempt to SSH into the new VM. SSH may not immediately
-    work because the VM may take some time to boot and start its
-    networking and daemons.
+    you can attempt to SSH into the new VM.
 </p>
 
 <pre class="panel">
@@ -166,144 +133,8 @@ $ ./bin/cloud-client.sh --terminate --handle vm-001
     <a href="http://www.nimbusproject.org/docs/2.4/clouds/cloudquickstart.html">client quickstart</a>.
 </p>
 
-<h3>Once more, with contextualization</h3>
+<p>TODO: demonstrate cluster launching</p>
 
-<div class="kvmpanel">
-    <p>
-        The KVM sample image does not support contextualization at this time, so you
-        can skip this step.
-    </p>
-</div>
-
-<p>
-    The cloud client also supports launching VMs with <em>contextualization</em>.
-    The <tt class="literal">nimbus-z2c</tt> image has an agent installed that securely
-    contacts a broker and exchanges information about itself and other nodes. This allows
-    launching groups of nodes that are contextualized into clusters.
-</p>
-
-<div class="note">
-    <p class="note-title">Metadata server</p>
-    <p>
-        This test will fail if you have not configured the
-        <a href="networking-setup.html#metadata-server">metadata server</a>. The VM will launch
-        but get stuck in the phase "<tt class="literal">Waiting for context broker updates</tt>".
-    </p>
-
-</div>
-
-
-<p>
-    The <tt class="literal">nimbus-z2c</tt> image supports simple contextualization.
-    Each VM's SSH public key will be retrieved by the cloud client and installed into
-    your <tt class="literal">~/.ssh/known_hosts</tt> file. If you launch multiple
-    <tt class="literal">nimbus-z2c</tt> VMs, they will be contextualized and
-    configured with host-based authentication.
-</p>
-<p>
-    Clusters are launched using a cluster document which describes the instances
-    and their relationships. An example for <tt class="literal">nimbus-z2c</tt>
-    is available <a href="http://www.nimbusproject.org/downloads/nimbus-z2c.xml">here</a>.
-</p>
-
-<pre class="panel">
-$ wget http://www.nimbusproject.org/downloads/nimbus-z2c.xml
-</pre>
-
-<pre class="panel">
-&lt;cluster&gt;
-  &lt;workspace&gt;
-    &lt;name&gt;node1&lt;/name&gt;
-    &lt;image&gt;nimbus-z2c&lt;/image&gt;
-    &lt;!-- How many to launch --&gt;
-    &lt;quantity&gt;1&lt;/quantity&gt;
-
-    &lt;nic wantlogin="true"&gt;public&lt;/nic&gt;
-
-    &lt;ctx&gt;
-      &lt;provides&gt;
-          &lt;identity /&gt;
-          &lt;role&gt;testrole1&lt;/role&gt;
-      &lt;/provides&gt;
-      &lt;requires&gt;
-          &lt;identity /&gt;
-          &lt;role name="testrole2" hostname="true" pubkey="true" /&gt;
-          &lt;role name="testrole3" /&gt;
-      &lt;/requires&gt;
-    &lt;/ctx&gt;
-  &lt;/workspace&gt;
-&lt;/cluster&gt;
-</pre>
-
-<p>
-    Run the cloud client again, specifying this file with
-    the <tt class="literal">--cluster</tt> argument.
-</p>
-
-<pre class="panel">
-$ ./bin/cloud-client.sh --run --cluster nimbus-z2c.xml --hours 1
-
-Requesting cluster.
-  - node1: image 'nimbus-z2c', 1 instance
-
-Context Broker:
-    https://nimbus.example.edu:8445/wsrf/services/NimbusContextBroker
-
-Created new context with broker.
-
-Workspace Factory Service:
-    https://nimbus.example.edu:8445/wsrf/services/WorkspaceFactoryService
-
-Creating workspace "node1"... done.
-  - 128.135.125.21 [ x001.nimbus.example.edu ]
-
-
-Launching cluster-001... done.
-
-Waiting for launch updates.
-  - cluster-001: all members are Running
-
-Waiting for context broker updates.
-  - cluster-001: contextualized
-
-SSH trusts new key for x001.nimbus.example.edu  [[ node1 ]]
-</pre>
-
-<p>
-    If all went well, you should see output similar to the example. The VM
-    was booted and its SSH key was sent back to the client via the Context
-    Broker. If you want to try booting multiple VMs in a cluster, edit the
-    XML file and adjust the quantity element then try again. You can also
-    check out the
-    <a href="../../clouds/clusters.html">cluster guide</a>
-    for more information.
-</p>
-
-<p>
-    If the VM successfully launches but the cloud client gets stuck with the
-    message "<tt class="literal">Waiting for context broker updates</tt>",
-    try logging into the VM with SSH and examining the context agent log file
-    <tt class="literal">/opt/nimbus/ctxlog.txt</tt>. There may be a problem
-    with the context broker or metadata server.
-</p>
-
-<a name="whatnext"> </a>
-<h3>What's next?</h3>
-<p>
-    Once all of these tests succeed, your cloud is up and running. At this
-    point you probably want to 
-    <a href="../reference.html#resource-pool">configure more VMM nodes</a>
-    and add them to the resource pool. You may also want to check out the
-    <a href="../reference.html">reference page</a> sections for more
-    a list of other configurations and information.
-</p>
-<p>
-    You can also now start enabling remote users.  You should familiarize yourself with the <a href="../reference.html#user-management">user management</a> tools, the <a href="../reference.html#nimbusweb-config">web application</a> that is available for securely distributing credentials, and look into configuring <a href="../reference.html#group-authz">per-user rights and allocations</a>.
-</p>
-<p>
-    Thanks for trying out Nimbus! If you have any questions or comments
-    please contact our <a href="/contact/">support lists</a>.
-</p>
 
 
 _NIMBUS_CENTER2_COLUMN_END

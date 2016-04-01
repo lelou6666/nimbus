@@ -34,25 +34,22 @@ public class DefaultCreateRequest implements _CreateRequest {
     // INSTANCE VARIABLES
     // -------------------------------------------------------------------------
 
-    protected String name;
-    protected VMFile[] vmFiles;
-    protected NIC[] nics;
-    protected String resourcePool;
-    protected Schedule schedule;
-    protected String coscheduleID;
-    protected boolean coscheduleDone;
-    protected boolean coscheduleMember;
-    protected ResourceAllocation ra;
-    protected RequiredVMM requiredVMM;
-    protected Kernel kernel;
-    protected CustomizationRequest[] custRequests;
-    protected String shutdownType;
-    protected String initialStateRequest;
-    protected Context context;
-    protected String mdUserData;
-    protected String sshKeyName;
-    protected String clientToken;
-    private String credential;
+    private String name;
+    private VMFile[] vmFiles;
+    private NIC[] nics;
+    private Schedule schedule;
+    private String coscheduleID;
+    private boolean coscheduleDone;
+    private boolean coscheduleMember;
+    private ResourceAllocation ra;
+    private RequiredVMM requiredVMM;
+    private Kernel kernel;
+    private CustomizationRequest[] custRequests;
+    private String shutdownType;
+    private String initialStateRequest;
+    private Context context;
+    private String mdUserData;
+    private String sshKeyName;
     
 
     // -------------------------------------------------------------------------
@@ -69,10 +66,6 @@ public class DefaultCreateRequest implements _CreateRequest {
 
     public NIC[] getRequestedNics() {
         return this.nics;
-    }
-
-    public String getRequestedResourcePool() {
-        return this.resourcePool;
     }
 
     public Schedule getRequestedSchedule() {
@@ -123,19 +116,10 @@ public class DefaultCreateRequest implements _CreateRequest {
         return this.mdUserData;
     }
 
-    public String getCredential() {
-        return this.credential;
-    }
-
     public String getSshKeyName() {
         return sshKeyName;
     }
 
-    public String getClientToken() {
-        return clientToken;
-    }
-
-    
     // -------------------------------------------------------------------------
     // implements org.nimbustools.api._repr._CreateRequest
     // -------------------------------------------------------------------------
@@ -150,10 +134,6 @@ public class DefaultCreateRequest implements _CreateRequest {
 
     public void setRequestedNics(NIC[] nics) {
         this.nics = nics;
-    }
-
-    public void setRequestedResourcePool(String resourcePool) {
-        this.resourcePool = resourcePool;
     }
 
     public void setRequestedSchedule(Schedule schedule) {
@@ -204,16 +184,8 @@ public class DefaultCreateRequest implements _CreateRequest {
         this.mdUserData = mdUserData;
     }
 
-    public void setCredential(String credential) {
-        this.credential = credential;
-    }
-
     public void setSshKeyName(String sshKeyName) {
         this.sshKeyName = sshKeyName;
-    }
-
-    public void setClientToken(String clientToken) {
-        this.clientToken = clientToken;
     }
 
     // -------------------------------------------------------------------------
@@ -242,7 +214,6 @@ public class DefaultCreateRequest implements _CreateRequest {
                 prefix + "userDataPresent? " + userDataPresent +
                 prefix + "initialStateRequest='" + this.initialStateRequest + "'" +
                 prefix + "sshKeyName='" + this.sshKeyName + "'" +
-                prefix + "clientToken=" + this.clientToken + "'" +
                 prefix + "context=" + this.context + "\n";
     }
 }

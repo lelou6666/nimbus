@@ -16,8 +16,6 @@
 
 package org.nimbustools.api.services.metadata;
 
-import org.nimbustools.api.repr.vm.NIC;
-
 public interface MetadataServer {
 
     public String getResponse(String target,
@@ -27,7 +25,7 @@ public interface MetadataServer {
 
     public String getCustomizationPath();
 
-    public String getContactURL(NIC[] nics);
+    public String getContactURL();
     
     public boolean isEnabled();
 }

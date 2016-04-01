@@ -16,16 +16,14 @@
 
 package org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image;
 
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesOwnersType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesOwnerType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesInfoType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesItemType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseInfoType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseItemType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.BlockDeviceMappingType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.BlockDeviceMappingItemType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesOwnersType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesOwnerType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesInfoType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesItemType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseInfoType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseItemType;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.ContainerInterface;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.service.UnimplementedOperations;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.ServiceImage;
@@ -122,7 +120,15 @@ public class ServiceImageImpl extends UnimplementedOperations
                     "Problem contacting repository: " + e.getMessage(), e);
         }
 
-        return this.convertFileListings(listings, ownerID, caller);
+        final String locationBase;
+        try {
+            // all from same place currently
+            locationBase = this.repository.getImageLocation(caller);
+        } catch (CannotTranslateException e) {
+            throw new RuntimeException("Unexpected: " + e.getMessage(), e);
+        }
+
+        return this.convertFileListings(listings, ownerID, locationBase);
     }
 
     
@@ -216,7 +222,7 @@ public class ServiceImageImpl extends UnimplementedOperations
     protected DescribeImagesResponseType convertFileListings(
                             FileListing[] listings,
                             String ownerID,
-                            Caller caller) {
+                            String givenLocationBase) {
 
         final DescribeImagesResponseType dirt = new DescribeImagesResponseType();
         final DescribeImagesResponseInfoType dirits =
@@ -227,8 +233,13 @@ public class ServiceImageImpl extends UnimplementedOperations
             dirits.setItem(EMPTY_RESP_ITEM_TYPE);
             return dirt; // *** EARLY RETURN ***
         }
+        
+        if (givenLocationBase == null) {
+            throw new IllegalArgumentException(
+                    "givenLocationBase may not be null");
+        }
 
-        String givenLocationBase;
+        final String locationBase = cleanLocationBase(givenLocationBase);
 
         final List retList = new LinkedList();
         for (int i = 0; i < listings.length; i++) {
@@ -241,30 +252,15 @@ public class ServiceImageImpl extends UnimplementedOperations
                                     new DescribeImagesResponseItemType();
             dirit.setArchitecture("i386"); // todo
 
-
             final String name = listing.getName();
-            try {
-                // all from same place currently
-                givenLocationBase = this.repository.getImageLocation(caller, name);
-            } catch (CannotTranslateException e) {
-                throw new RuntimeException("Unexpected: " + e.getMessage(), e);
-            }
-            if (givenLocationBase == null) {
-                throw new IllegalArgumentException(
-                    "givenLocationBase may not be null");
-            }
-            //String locationBase = cleanLocationBase(givenLocationBase);
-
             dirit.setImageId(name);
-            dirit.setImageLocation(givenLocationBase + "/");
+            dirit.setImageLocation(locationBase);
             dirit.setImageOwnerId(ownerID);
             dirit.setImageState("available"); // todo
             dirit.setImageType("machine"); // todo
             dirit.setIsPublic(!listing.isReadWrite()); // cloud convention
             dirit.setKernelId("default-kernel"); // todo
             dirit.setRamdiskId("default-ramdisk"); // todo
-            dirit.setBlockDeviceMapping(new BlockDeviceMappingType(
-                    new BlockDeviceMappingItemType[]{}));
             retList.add(dirit);
         }
 

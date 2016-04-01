@@ -159,7 +159,7 @@ def parsetarname(name):
     n = name.strip()
     if not n:
         raise Exception("invalid name: '%s'" % name)
-    prefix = "nimbus-iaas-"
+    prefix = "nimbus-"
     suffix = "-src.tar.gz"
     if not n.startswith(prefix):
         raise Exception("does not start with %s" % prefix)

@@ -24,7 +24,7 @@ import org.mortbay.jetty.handler.AbstractHandler;
 import org.mortbay.jetty.bio.SocketConnector;
 
 import java.net.URL;
-import java.util.Set;
+import java.net.MalformedURLException;
 
 public class HTTPListener {
 
@@ -47,24 +47,21 @@ public class HTTPListener {
     // -------------------------------------------------------------------------
 
     private final Server server;
-    private final URL[] sockets;
-
+    private final String listenSocket;
+    private URL url;
+    
 
     // -------------------------------------------------------------------------
     // CONSTRUCTORS
     // -------------------------------------------------------------------------
 
+    public HTTPListener(String listenSocket) throws Exception {
 
-    public HTTPListener(Set<URL> listenSockets) {
-        if (listenSockets == null) {
-            throw new IllegalArgumentException("listenSockets may not be null");
+        if (listenSocket == null || listenSocket.trim().length() == 0) {
+            logger.warn("listenSocket setting is empty or missing");
         }
 
-        this.sockets = listenSockets.toArray(new URL[listenSockets.size()]);
-        if (this.sockets.length == 0) {
-            throw new IllegalArgumentException("listenSockets cannot be empty");
-        }
-
+        this.listenSocket = listenSocket;
         this.server = new Server();
     }
 
@@ -73,43 +70,29 @@ public class HTTPListener {
     // ...
     // -------------------------------------------------------------------------
 
-    public void initServer(AbstractHandler handler) {
+    public URL getURL() {
+        return this.url;
+    }
 
-        if (handler == null) {
-            throw new IllegalArgumentException("handler may not be null");
-        }
+    public void initServer(AbstractHandler handler) throws MalformedURLException {
 
-        final StringBuilder sb = new StringBuilder();
-        sb.append("Metadata server socket").
-                append(sockets.length > 1 ? "s: " : ": ");
+        // hardcoding http here on purpose, to make it obvious that https is
+        // not supported if someone tries to put more than a host+port in the
+        // configuration
+        this.url = new URL("http://" + this.listenSocket);
 
-        final Connector[] connectors = new Connector[sockets.length];
-        for (int i = 0; i < sockets.length; i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            final URL url = sockets[i];
-            sb.append(url.toString());
+        logger.info("Metadata server URL: '" + this.url.toString() + "'");
 
-            final Connector connector = new SocketConnector();
-            connector.setHost(url.getHost());
-            connector.setPort(url.getPort());
-            connectors[i] = connector;
-        }
-        logger.info(sb.toString());
+        System.setProperty("org.mortbay.log.class", LOGGING_CLASS);
 
-        System.setProperty(LOGGING_KEY, LOGGING_CLASS);
-
-        this.server.setConnectors(connectors);
+        final Connector connector = new SocketConnector();
+        connector.setHost(url.getHost());
+        connector.setPort(url.getPort());
+        this.server.setConnectors(new Connector[]{connector});
         this.server.setHandler(handler);
     }
 
     public void start() throws Exception {
         this.server.start();
-    }
-
-    public void stop() throws Exception {
-        this.server.stop();
-        this.server.join();
     }
 }

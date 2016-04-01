@@ -47,14 +47,11 @@ public interface ResourceAllocations {
      */
     public ResourceAllocation getMatchingRA(String name,
                                             int minNumNodes,
-                                            int maxNumNodes,
-                                            boolean spot)
+                                            int maxNumNodes)
             throws CannotTranslateException;
 
     /**
      * @return vmm to request
      */
     public RequiredVMM getRequiredVMM();
-    
-    public String getSpotInstanceType();
 }

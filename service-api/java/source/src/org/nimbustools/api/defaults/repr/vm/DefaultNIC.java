@@ -18,9 +18,7 @@ package org.nimbustools.api.defaults.repr.vm;
 
 import org.nimbustools.api._repr.vm._NIC;
 
-import java.io.Serializable;
-
-public class DefaultNIC implements _NIC, Serializable {
+public class DefaultNIC implements _NIC {
 
     // -------------------------------------------------------------------------
     // INSTANCE VARIABLES

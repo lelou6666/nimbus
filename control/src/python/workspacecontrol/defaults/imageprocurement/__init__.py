@@ -2,4 +2,3 @@
 
 __all__ = ["DefaultImageProcurement"]
 from propagate_common import DefaultImageProcurement
-

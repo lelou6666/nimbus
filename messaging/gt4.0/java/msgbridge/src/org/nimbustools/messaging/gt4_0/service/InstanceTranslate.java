@@ -290,11 +290,6 @@ public class InstanceTranslate extends BaseTranslate {
 
         return t_sched;
     }
-
-    public String getDetails(VM vm)
-    {
-        return vm.getDetails();
-    }
     
 
     // -------------------------------------------------------------------------

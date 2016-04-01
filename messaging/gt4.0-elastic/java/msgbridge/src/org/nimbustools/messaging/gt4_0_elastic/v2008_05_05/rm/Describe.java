@@ -18,12 +18,10 @@ package org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm;
 
 import org.nimbustools.api.repr.CannotTranslateException;
 import org.nimbustools.api.repr.vm.VM;
-import org.nimbustools.api.repr.vm.VMFile;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeInstancesResponseType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeInstancesType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.PlacementRequestType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.PlacementResponseType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.InstanceStateType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeInstancesResponseType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeInstancesType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.PlacementResponseType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.InstanceStateType;
 
 import java.util.Calendar;
 
@@ -42,13 +40,11 @@ public interface Describe {
 
     public String getReason(VM vm) throws CannotTranslateException;
     
-    public String getImageID(VMFile[] vmFiles) throws CannotTranslateException;
+    public String getImageID(VM vm) throws CannotTranslateException;
 
     public String getInstanceType(VM vm) throws CannotTranslateException;
 
     public PlacementResponseType getPlacement();
-    
-    public PlacementRequestType getPlacementReq();    
 
     public Calendar getLaunchTime(VM vm) throws CannotTranslateException;
 }

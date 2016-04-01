@@ -27,12 +27,11 @@ echo "Nimbus git repository: $repo"
 echo "Created temp directory: $co_dir"
 
 cd $co_dir
-git clone --depth 1 $repo
+git clone $repo
 
 cd nimbus/cumulus/deps
 ./get-em.sh
 cd $co_dir/nimbus
-ant -f scripts/lib/gt4.0/brokerdist/build.xml clean
 ant -f scripts/lib/gt4.0/dist/build.xml clean-local
 ant -f scripts/lib/gt4.0/dist/build.xml create-dist
 if [ $? -ne 0 ]; then

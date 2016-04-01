@@ -15,9 +15,8 @@
  */
 package org.nimbustools.messaging.query.v2009_08_15;
 
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.*;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.*;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.*;
-import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.IdempotentCreationMismatchRemoteException;
 import org.nimbustools.messaging.query.*;
 import static org.nimbustools.messaging.query.QueryUtils.*;
 import org.apache.commons.logging.Log;
@@ -25,7 +24,6 @@ import org.apache.commons.logging.LogFactory;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.UriInfo;
 import java.rmi.RemoteException;
 import java.util.HashMap;
@@ -67,15 +65,10 @@ public class ElasticService implements ElasticVersion {
 
         // terrible things
         final ElasticAction[] actions = new ElasticAction[]{
-                new RequestSpotInstances(serviceRM),
-                new CancelSpotInstanceRequests(serviceRM),
-                new DescribeSpotInstanceRequests(serviceRM),
-                new DescribeSpotPriceHistory(serviceRM), new ImportKeyPair(),
                 new CreateKeyPair(), new DeleteKeyPair(), new DescribeKeyPairs(),
                 new RunInstances(), new RebootInstances(), new DescribeInstances(),
                 new TerminateInstances(), new DescribeImages(),
-                new DescribeAvailabilityZones(), new DescribeSecurityGroups(),
-                new DescribeRegions(),
+                new DescribeAvailabilityZones()
         };
         actionMap = new HashMap<String, ElasticAction>(actions.length);
         for (ElasticAction action : actions) {
@@ -103,7 +96,6 @@ public class ElasticService implements ElasticVersion {
 
 
     @Path("/")
-    @Produces("text/xml")
     public class CreateKeyPair implements ElasticAction {
         public String getName() {
             return "CreateKeyPair";
@@ -127,34 +119,6 @@ public class ElasticService implements ElasticVersion {
         }
     }
 
-    @Path("/")
-    @Produces("text/xml")
-    public class ImportKeyPair implements ElasticAction {
-        public String getName() {
-            return "ImportKeyPair";
-        }
-
-        @GET
-        public ImportKeyPairResponseType handleGet(@QueryParam("KeyName") String keyName,
-                                                   @QueryParam("PublicKeyMaterial") String keyMaterial) {
-            assureRequiredParameter("KeyName", keyName);
-
-            final ImportKeyPairType importKeyPairType = new ImportKeyPairType(keyName, keyMaterial);
-
-            try {
-                return serviceSecurity.importKeyPair(importKeyPairType);
-            } catch (RemoteException e) {
-                throw new QueryException(QueryError.GeneralError, e);
-            }
-        }
-        @POST
-        public ImportKeyPairResponseType handlePost(@FormParam("KeyName") String keyName,
-                                                    @FormParam("PublicKeyMaterial") String keyMaterial) {
-            return handleGet(keyName, keyMaterial);
-        }
-    }
-
-    @Produces("text/xml")
     public class DeleteKeyPair implements ElasticAction {
         public String getName() {
             return "DeleteKeyPair";
@@ -178,7 +142,6 @@ public class ElasticService implements ElasticVersion {
         }
     }
 
-    @Produces("text/xml")
     public class DescribeKeyPairs implements ElasticAction {
         public String getName() { return "DescribeKeyPairs"; }
 
@@ -187,10 +150,6 @@ public class ElasticService implements ElasticVersion {
             final List<String> keyNames =
                     getParameterList(uriInfo, "KeyName");
 
-            return handle(keyNames);
-        }
-
-        protected DescribeKeyPairsResponseType handle(List<String> keyNames) {
             DescribeKeyPairsItemType[] keys = new DescribeKeyPairsItemType[keyNames.size()];
             for (int i = 0; i < keys.length; i++) {
                 keys[i] = new DescribeKeyPairsItemType(keyNames.get(i));
@@ -198,21 +157,17 @@ public class ElasticService implements ElasticVersion {
             final DescribeKeyPairsInfoType keySet = new DescribeKeyPairsInfoType(keys);
 
             try {
-                return serviceSecurity.describeKeyPairs(new DescribeKeyPairsType(null, keySet));
+                return serviceSecurity.describeKeyPairs(new DescribeKeyPairsType(keySet));
             } catch (RemoteException e) {
                 throw new QueryException(QueryError.GeneralError, e);
             }
         }
-
         @POST
-        public DescribeKeyPairsResponseType handlePost(MultivaluedMap<String,String> formParams) {
-            final List<String> keyNames =
-                    getParameterList(formParams, "KeyName");
-            return handle(keyNames);
+        public DescribeKeyPairsResponseType handlePost(@Context UriInfo uriInfo) {
+            return handleGet(uriInfo);
         }
     }
 
-    @Produces("text/xml")
     public class RunInstances implements ElasticAction {
         public String getName() {
             return "RunInstances";
@@ -225,10 +180,7 @@ public class ElasticService implements ElasticVersion {
                 @FormParam("MaxCount") String maxCount,
                 @FormParam("KeyName") String keyName,
                 @FormParam("UserData") String userData,
-                @FormParam("InstanceType") String instanceType,
-                @FormParam("Placement.GroupName") String groupName,
-                @FormParam("Placement.AvailabilityZone") String availabilityZone,
-                @FormParam("ClientToken") String clientToken) {
+                @FormParam("InstanceType") String instanceType) {
             // only including parameters that are actually used right now
 
             assureRequiredParameter("ImageId", imageId);
@@ -246,19 +198,10 @@ public class ElasticService implements ElasticVersion {
                 request.setUserData(data);
             }
             request.setInstanceType(instanceType);
-            if (groupName != null || availabilityZone != null) {
-                PlacementRequestType placement = new PlacementRequestType();
-                placement.setGroupName(groupName);
-                placement.setAvailabilityZone(availabilityZone);
-                request.setPlacement(placement);
-            }
-            request.setClientToken(clientToken);
 
             try {
                 return serviceRM.runInstances(request);
 
-            } catch (IdempotentCreationMismatchRemoteException e) {
-                throw new QueryException(QueryError.IdempotentParameterMismatch, e);
             } catch (RemoteException e) {
                 throw new QueryException(QueryError.GeneralError, e);
             }
@@ -270,15 +213,11 @@ public class ElasticService implements ElasticVersion {
                 @FormParam("MaxCount") String maxCount,
                 @FormParam("KeyName") String keyName,
                 @FormParam("UserData") String userData,
-                @FormParam("InstanceType") String instanceType,
-                @FormParam("Placement.GroupName") String groupName,
-                @FormParam("Placement.AvailabilityZone") String availabilityZone,
-                @FormParam("ClientToken") String clientToken) {
-            return handleGet(imageId, minCount, maxCount, keyName, userData, instanceType, groupName, availabilityZone, clientToken);
+                @FormParam("InstanceType") String instanceType) {
+            return handleGet(imageId, minCount, maxCount, keyName, userData, instanceType);
         }
     }
 
-    @Produces("text/xml")
     public class RebootInstances implements ElasticAction {
         public String getName() {
             return "RebootInstances";
@@ -289,10 +228,6 @@ public class ElasticService implements ElasticVersion {
             final List<String> instanceIds =
                     getParameterList(uriInfo, "InstanceId");
 
-            return handle(instanceIds);
-        }
-
-        protected RebootInstancesResponseType handle(List<String> instanceIds) {
             if (instanceIds.size() == 0) {
                 throw new QueryException(QueryError.InvalidArgument,
                         "Specify at least one instance to reboot");
@@ -315,16 +250,12 @@ public class ElasticService implements ElasticVersion {
                 throw new QueryException(QueryError.GeneralError, e);
             }
         }
-
         @POST
-        public RebootInstancesResponseType handlePost(MultivaluedMap<String,String> formParams) {
-            final List<String> instanceIds =
-                    getParameterList(formParams, "InstanceId");
-            return handle(instanceIds);
+        public RebootInstancesResponseType handlePost(@Context UriInfo uriInfo) {
+            return handleGet(uriInfo);
         }
     }
 
-    @Produces("text/xml")
     public class DescribeInstances implements ElasticAction {
         public String getName() {
             return "DescribeInstances";
@@ -335,10 +266,6 @@ public class ElasticService implements ElasticVersion {
             final List<String> instanceIds =
                     getParameterList(uriInfo, "InstanceId");
 
-            return handle(instanceIds);
-        }
-
-        protected DescribeInstancesResponseType handle(List<String> instanceIds) {
             final DescribeInstancesItemType[] items =
                     new DescribeInstancesItemType[instanceIds.size()];
 
@@ -347,7 +274,7 @@ public class ElasticService implements ElasticVersion {
             }
 
             final DescribeInstancesInfoType info = new DescribeInstancesInfoType(items);
-            final DescribeInstancesType request = new DescribeInstancesType(null, info);
+            final DescribeInstancesType request = new DescribeInstancesType(info);
 
             try {
                 return serviceRM.describeInstances(request);
@@ -356,16 +283,12 @@ public class ElasticService implements ElasticVersion {
                 throw new QueryException(QueryError.GeneralError, e);
             }
         }
-
         @POST
-        public DescribeInstancesResponseType handlePost(MultivaluedMap<String,String> formParams) {
-            final List<String> instanceIds =
-                    getParameterList(formParams, "InstanceId");
-            return handle(instanceIds);
+        public DescribeInstancesResponseType handlePost(@Context UriInfo uriInfo) {
+            return handleGet(uriInfo);
         }
     }
 
-    @Produces("text/xml")
     public class TerminateInstances implements ElasticAction {
         public String getName() {
             return "TerminateInstances";
@@ -376,23 +299,19 @@ public class ElasticService implements ElasticVersion {
             final List<String> instanceIds =
                     getParameterList(uriInfo, "InstanceId");
 
-            return handle(instanceIds);
-        }
-
-        protected TerminateInstancesResponseType handle(List<String> instanceIds) {
             if (instanceIds.size() == 0) {
                 throw new QueryException(QueryError.InvalidArgument,
                         "Specify at least one instance to terminate");
             }
 
-            InstanceIdType[] items =
-                    new InstanceIdType[instanceIds.size()];
+            TerminateInstancesItemType[] items =
+                    new TerminateInstancesItemType[instanceIds.size()];
 
             for (int i = 0; i < items.length; i++) {
-                items[i] = new InstanceIdType(instanceIds.get(i));
+                items[i] = new TerminateInstancesItemType(instanceIds.get(i));
             }
 
-            InstanceIdSetType info = new InstanceIdSetType(items);
+            TerminateInstancesInfoType info = new TerminateInstancesInfoType(items);
 
             final TerminateInstancesType request = new TerminateInstancesType(info);
 
@@ -403,16 +322,12 @@ public class ElasticService implements ElasticVersion {
                 throw new QueryException(QueryError.GeneralError, e);
             }
         }
-
         @POST
-        public TerminateInstancesResponseType handlePost(MultivaluedMap<String,String> formParams) {
-            final List<String> instanceIds =
-                    getParameterList(formParams, "InstanceId");
-            return handle(instanceIds);
+        public TerminateInstancesResponseType handlePost(@Context UriInfo uriInfo) {
+            return handleGet(uriInfo);
         }
     }
 
-    @Produces("text/xml")
     public class DescribeImages implements ElasticAction {
         public String getName() {
             return "DescribeImages";
@@ -470,7 +385,6 @@ public class ElasticService implements ElasticVersion {
         }
     }
 
-    @Produces("text/xml")
     public class DescribeAvailabilityZones implements ElasticAction {
         public String getName() {
             return "DescribeAvailabilityZones";
@@ -503,38 +417,6 @@ public class ElasticService implements ElasticVersion {
         public DescribeAvailabilityZonesResponseType handlePost(
                 @FormParam("ZoneName") String zoneName) {
             return handleGet(zoneName);
-        }
-    }
-
-    @Produces("text/xml")
-    public class DescribeSecurityGroups implements ElasticAction {
-        public String getName() {
-            return "DescribeSecurityGroups";
-        }
-
-        @GET
-        public DescribeSecurityGroupsResponseType handleGet() {
-            return new DescribeSecurityGroupsResponseType(null, new SecurityGroupSetType(new SecurityGroupItemType[0]));
-        }
-        @POST
-        public DescribeSecurityGroupsResponseType handlePost() {
-            return handleGet();
-        }
-    }
-
-    @Produces("text/xml")
-    public class DescribeRegions implements ElasticAction {
-        public String getName() {
-            return "DescribeRegions";
-        }
-
-        @GET
-        public DescribeRegionsResponseType handleGet() {
-            return new DescribeRegionsResponseType(new RegionSetType(new RegionItemType[0]), null);
-        }
-        @POST
-        public DescribeRegionsResponseType handlePost() {
-            return handleGet();
         }
     }
 }

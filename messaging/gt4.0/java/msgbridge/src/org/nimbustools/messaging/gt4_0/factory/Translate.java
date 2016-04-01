@@ -183,7 +183,6 @@ public class Translate extends BaseTranslate {
         if (optional != null) {
             customizes = optional.getFilewrite();
             req.setMdUserData(optional.getMdServerUserdata());
-            req.setCredential(optional.getCredentialToCopy());
         } else {
             customizes = null;
         }

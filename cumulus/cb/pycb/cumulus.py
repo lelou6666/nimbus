@@ -14,8 +14,6 @@ from pycb.cbRequest import cbDeleteObject
 from pycb.cbRequest import cbPutBucket
 from pycb.cbRequest import cbPutObject
 from pycb.cbRequest import cbHeadObject
-from pycb.cbRequest import cbCopyObject
-from pycb.cbRedirector import *
 from datetime import date, datetime
 from xml.dom.minidom import Document
 import uuid
@@ -28,25 +26,9 @@ import logging
 import pycb
 import threading
 import tempfile
-import threading
 
-def end_redirector(result, request):
-    pycb.config.redirector.end_connection(request)
-
-def init_redirector(req, bucketName, objectName):
-    redir_host = pycb.config.redirector.new_connection(req)
-    req.notifyFinish().addBoth(end_redirector, req)
-
-    if redir_host:
-        pycb.log(logging.INFO, "REDIRECT %s" % (redir_host))
-        ex = cbException('TemporaryRedirect')
-        req.setHeader('location', "http://%s%s" % (redir_host, req.uri))
-        ex.add_custom_xml("Bucket", bucketName)
-        ex.add_custom_xml("Endpoint", redir_host)
-        raise ex
 
 def path_to_bucket_object(path):
-    path = urllib.unquote(path)
     if path == "/":
         return (path, None)
     # extract out the bucket name
@@ -60,6 +42,8 @@ def path_to_bucket_object(path):
         objectName = p_a[1].strip()
         if objectName == "":
             objectName = None
+        else:
+            objectName = urllib.unquote(objectName)
     return (bucketName, objectName)
 
 def createPath(headers, path):
@@ -69,6 +53,12 @@ def createPath(headers, path):
     h_a = host.split(':')
     if len(h_a) > 0:
         host = h_a[0]
+
+#    if host == pycb.config.hostname:
+#        return path
+
+#    b = host.split('.', 1)[0]
+#    path = '/' + b + path
 
     return path
 
@@ -81,7 +71,7 @@ def authorize(headers, message_type, path, uri):
     user = pycb.config.auth.get_user(id)
     key = user.get_password()
 
-    pycb.log(logging.INFO, "AUTHORIZING %s %s %s" % (message_type, path, headers))
+    pycb.log(logging.INFO, "%s %s %s" % (message_type, path, headers))
     b64_hmac = pycb.get_auth_hash(key, message_type, path, headers, uri)
 
     if auth_hash == b64_hmac:
@@ -108,10 +98,9 @@ class CBService(resource.Resource):
         return str(uuid.uuid1()).replace("-", "")
 
     #  figure out if the operation is targeted at a service, bucket, or
-
-
     #  object
     def request_object_factory(self, request, user, path, requestId):
+
         pycb.log(logging.INFO, "path %s" % (path))
         # handle the one service operation
         if path == "/":
@@ -121,7 +110,6 @@ class CBService(resource.Resource):
             raise cbException('InvalidArgument')
 
         (bucketName, objectName) = path_to_bucket_object(path)
-        init_redirector(request, bucketName, objectName)
 
         pycb.log(logging.INFO, "path %s bucket %s object %s" % (path, bucketName, str(objectName)))
         if request.method == 'GET':
@@ -134,12 +122,7 @@ class CBService(resource.Resource):
             if objectName == None:
                 cbR = cbPutBucket(request, user, bucketName, requestId, pycb.config.bucket)
             else:
-                args = request.getAllHeaders()
-                if 'x-amz-copy-source' in args:
-                    (srcBucketName, srcObjectName) = path_to_bucket_object(args['x-amz-copy-source'])
-                    cbR = cbCopyObject(request, user, requestId, pycb.config.bucket, srcBucketName, srcObjectName, bucketName, objectName)
-                else:
-                    cbR = cbPutObject(request, user, bucketName, objectName, requestId, pycb.config.bucket)
+                cbR = cbPutObject(request, user, bucketName, objectName, requestId, pycb.config.bucket)
             return cbR
         elif request.method == 'POST':
             pycb.log(logging.ERROR, "Nothing to handle POST")
@@ -172,7 +155,7 @@ class CBService(resource.Resource):
             self.allowed_event(request, user, requestId, rPath)
         except cbException, ex:
             eMsg = ex.sendErrorResponse(request, requestId)
-            pycb.log(logging.ERROR, eMsg, traceback)
+            pycb.log(logging.INFO, eMsg, traceback)
         except Exception, ex2:
             traceback.print_exc(file=sys.stdout)
             gdEx = cbException('InternalError')
@@ -218,7 +201,7 @@ class CumulusHTTPChannel(http.HTTPChannel):
             headers[k.lower()] = v[-1]
         return headers
 
-    def send_access_error(self, req):
+    def send_access_error(self):
         ex = cbException('AccessDenied')
         m_msg = "HTTP/1.1 %s %s\r\n" % (ex.httpCode, ex.httpDesc)
         self.transport.write(m_msg)
@@ -229,24 +212,11 @@ class CumulusHTTPChannel(http.HTTPChannel):
         self.transport.write(e_msg)
         self.transport.loseConnection()
 
-    def send_redirect(self):
-        m_msg = "HTTP/1.1 %s %s\r\n" % (ex.httpCode, ex.httpDesc)
-        self.transport.write(m_msg)
-        m_msg = "%s: %s\r\n" % (('x-amz-request-id', str(uuid.uuid1())))
-        self.transport.write(m_msg)
-        self.transport.write('content-type: text/html\r\n')
-        e_msg = ex.make_xml_string(self._path, str(uuid.uuid1()))
-        self.transport.write(e_msg)
-        self.transport.loseConnection()
-        return ex
-
-
     # intercept the key event
     def allHeadersReceived(self):
         http.HTTPChannel.allHeadersReceived(self)
 
         req = self.requests[-1]
-        req._cumulus_killed = None
         h = self.getAllHeaders(req)
         # we can check the authorization here
         rPath = self._path
@@ -254,11 +224,13 @@ class CumulusHTTPChannel(http.HTTPChannel):
         if ndx >= 0:
             rPath = rPath[0:ndx]
         rPath = createPath(h, rPath)
-#        try:
-#            user = authorize(h, self._command, rPath, self._path)
-#        except:
-#            self.send_access_error(req)
-#            return
+        try:
+            user = authorize(h, self._command, rPath, self._path)
+        except:
+            # if there is an exception set this up to send all
+            # arrving data to /dev/null
+            self.send_access_error()
+            return
 
         if 'expect' in h:
             if h['expect'].lower() == '100-continue':
@@ -266,7 +238,7 @@ class CumulusHTTPChannel(http.HTTPChannel):
 
         (bucketName, objectName) = path_to_bucket_object(rPath)
         # if we are putting an object
-        if objectName != None and self._command == "PUT":
+        if objectName != None:
             #  free up the temp object that we will not be using
             req.content.close()
             # give twisted our own file like object

@@ -179,7 +179,7 @@ public class DefaultRepository implements Repository {
     // implements Repository
     // -------------------------------------------------------------------------
 
-    public String getImageLocation(Caller caller, String vmname)
+    public String getImageLocation(Caller caller)
             throws CannotTranslateException {
 
         final String ownerID = this.container.getOwnerID(caller);

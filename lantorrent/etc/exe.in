@@ -1,7 +1,0 @@
-#!/bin/bash
-
-dir=`dirname $0`
-cd $dir/..
-export LANTORRENT_HOME=`pwd`
-
-exec @PGMNAME@ "${@}"

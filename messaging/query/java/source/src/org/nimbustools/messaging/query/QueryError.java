@@ -26,6 +26,5 @@ public enum QueryError {
     InternalError,
     GeneralError,
     MissingClientTokenId,
-    InvalidParameterValue,
-    IdempotentParameterMismatch,
+    InvalidParameterValue
 }

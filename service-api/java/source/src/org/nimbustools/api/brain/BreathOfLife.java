@@ -103,9 +103,7 @@ public class BreathOfLife {
             name = name + " @ " + xmlCtxPath;
         }
 
-        // Logs need some kind of signal when a container restart happens.
-        //Logging.debug("Initializing " + name);
-        System.out.println("\n\nInitializing " + name + "\n\n");
+        Logging.debug("Initializing " + name);
 
         final ApplicationContext ctx;
         if (xmlCtxPath == null) {
